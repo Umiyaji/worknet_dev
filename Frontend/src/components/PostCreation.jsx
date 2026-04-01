@@ -158,7 +158,11 @@ const PostCreation = ({ user }) => {
 		<div className="bg-secondary rounded-lg shadow mb-2 md:mb-4 lg:mb-4 p-4">
 			<div className="flex space-x-3">
 				<img
-					src={user?.profilePicture || "/avatar.png"}
+					src={
+						user?.role === "recruiter"
+							? user?.companyLogo || user?.profilePicture || "/avatar.png"
+							: user?.profilePicture || "/avatar.png"
+					}
 					alt={user?.name || "Profile"}
 					className="size-10 rounded-full hidden md:block lg:block"
 				/>

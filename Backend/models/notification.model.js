@@ -10,7 +10,14 @@ const notificationSchema = new mongoose.Schema(
 		type: {
 			type: String,
 			required: true,
-			enum: ["like", "comment", "connectionAccepted", "message"],
+			enum: [
+				"like",
+				"comment",
+				"connectionAccepted",
+				"message",
+				"applicationSubmitted",
+				"applicationStatusUpdated",
+			],
 		},
 		relatedUser: {
 			type: mongoose.Schema.Types.ObjectId,
@@ -23,6 +30,18 @@ const notificationSchema = new mongoose.Schema(
 		relatedMessage: {
 			type: mongoose.Schema.Types.ObjectId,
 			ref: "Message",
+		},
+		relatedJob: {
+			type: mongoose.Schema.Types.ObjectId,
+			ref: "Job",
+		},
+		relatedApplication: {
+			type: mongoose.Schema.Types.ObjectId,
+			ref: "Application",
+		},
+		metadata: {
+			type: mongoose.Schema.Types.Mixed,
+			default: {},
 		},
 		read: {
 			type: Boolean,

@@ -14,7 +14,7 @@ const LoginPage = () => {
           <div className="grid w-full overflow-hidden rounded-3xl border border-white/70 bg-white/80 shadow-[0_30px_80px_-30px_rgba(15,23,42,0.45)] backdrop-blur-xl md:grid-cols-[1.1fr_1fr]">
             <div className="relative hidden flex-col justify-between bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-900 p-10 text-slate-100 md:flex">
               <div>
-                <img className="h-14" src="/worknet_logo_1.png" alt="Worknet" />
+                <img className="h-16 w-16 object-contain" src="/favicon-logo1.png" alt="Worknet" />
                 <p className="mt-8 text-4xl font-semibold leading-tight">Welcome back to your Worknet community</p>
                 <p className="mt-4 text-sm text-slate-300">
                   Connect with opportunities, people, and updates that move your career forward.
@@ -28,7 +28,7 @@ const LoginPage = () => {
             <div className="p-6 sm:p-10">
               <div className="mx-auto w-full max-w-md">
                 <div className="md:hidden">
-                  <img className="mx-auto h-12" src="/worknet_logo_1.png" alt="Worknet" />
+                  <img className="mx-auto h-14 w-14 object-contain" src="/favicon-logo1.png" alt="Worknet" />
                 </div>
 
                 <h1 className="mt-5 text-3xl font-bold tracking-tight text-slate-900">Sign in</h1>

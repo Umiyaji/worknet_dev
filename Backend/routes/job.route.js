@@ -7,12 +7,16 @@ import {
 	createJob,
 	deleteJob,
 	getAllJobs,
+	getApplicationDetails,
 	getApplicantsForJob,
 	getJobById,
 	getMyApplications,
 	getRecruiterJobs,
 	publishExcelJobs,
+	sendMessageToApplicant,
 	updateJob,
+	updateApplicationNotes,
+	updateApplicationStatus,
 	uploadExcelPreview,
 } from "../controllers/job.controller.js";
 
@@ -32,6 +36,9 @@ router.post("/upload-excel/publish", protectRoute, requireRecruiter, publishExce
 
 router.post("/:jobId/apply", protectRoute, applyToJob);
 router.get("/:jobId/applicants", protectRoute, requireRecruiter, getApplicantsForJob);
+router.get("/:jobId/applicants/:applicationId", protectRoute, requireRecruiter, getApplicationDetails);
+router.put("/:jobId/applicants/:applicationId/status", protectRoute, requireRecruiter, updateApplicationStatus);
+router.put("/:jobId/applicants/:applicationId/notes", protectRoute, requireRecruiter, updateApplicationNotes);
+router.post("/:jobId/applicants/:applicationId/message", protectRoute, requireRecruiter, sendMessageToApplicant);
 
 export default router;
-

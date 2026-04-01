@@ -3,6 +3,19 @@ import { Home, UserPlus, Bell } from "lucide-react";
 
 export default function Sidebar({ user }) {
 	if (!user) return null;
+	const isRecruiter = user?.role === "recruiter";
+	const coverImage = isRecruiter
+		? user?.companyBanner || user?.bannerImg || "/banner.png"
+		: user?.bannerImg || "/banner.png";
+	const avatarImage = isRecruiter
+		? user?.companyLogo || user?.profilePicture || "/avatar.png"
+		: user?.profilePicture || "/avatar.png";
+	const displayName = isRecruiter
+		? user?.companyName || user?.name || "User"
+		: user?.name || "User";
+	const subtitle = isRecruiter
+		? user?.industry || "Recruiter"
+		: user?.headline || "No headline set";
 
 	return (
 		<div className='bg-secondary rounded-lg shadow'>
@@ -10,24 +23,24 @@ export default function Sidebar({ user }) {
 				<div
 					className='h-16 rounded-t-lg bg-cover bg-center'
 					style={{
-						backgroundImage: `url("${user?.bannerImg || "/banner.png"}")`,
+						backgroundImage: `url("${coverImage}")`,
 					}}
 				/>
 
 				<Link to={`/profile/${user?.username}`}>
 					<img
-						src={user?.profilePicture || "/avatar.png"}
-						alt={user?.name || "Profile"}
+						src={avatarImage}
+						alt={displayName}
 						className='w-20 h-20 rounded-full mx-auto mt-[-40px]'
 					/>
 
 					<h2 className='text-xl font-semibold mt-2'>
-						{user?.name || "User"}
+						{displayName}
 					</h2>
 				</Link>
 
 				<p className='text-info'>
-					{user?.headline || "No headline set"}
+					{subtitle}
 				</p>
 
 				<p className='text-info text-xs'>

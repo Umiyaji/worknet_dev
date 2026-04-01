@@ -9,7 +9,7 @@ export const getRecruiterDashboard = async (req, res) => {
 	try {
 		const recruiterId = req.user._id;
 
-		const [totalJobsPosted, activeJobs, recentJobs, applicationsByJob] = await Promise.all([
+		const [totalJobsPosted, activeJobs, recentJobs, applicationsByJob, statusBreakdown, recentApplications] = await Promise.all([
 			Job.countDocuments({ companyId: recruiterId }),
 			Job.countDocuments({ companyId: recruiterId, lastDateToApply: { $gte: new Date() } }),
 			Job.find({ companyId: recruiterId }).sort({ createdAt: -1 }).limit(5),
@@ -31,13 +31,47 @@ export const getRecruiterDashboard = async (req, res) => {
 					},
 				},
 			]),
+			Application.aggregate([
+				{
+					$lookup: {
+						from: "jobs",
+						localField: "jobId",
+						foreignField: "_id",
+						as: "job",
+					},
+				},
+				{ $unwind: "$job" },
+				{ $match: { "job.companyId": recruiterId } },
+				{
+					$group: {
+						_id: "$status",
+						count: { $sum: 1 },
+					},
+				},
+			]),
+			Application.find()
+				.populate({
+					path: "jobId",
+					match: { companyId: recruiterId },
+					select: "title",
+				})
+				.populate("userId", "name username profilePicture")
+				.sort({ createdAt: -1 })
+				.limit(8),
 		]);
+
+		const filteredRecentApplications = recentApplications.filter((item) => item.jobId);
 
 		return res.json({
 			totalJobsPosted,
 			activeJobs,
 			totalApplicants: applicationsByJob[0]?.totalApplicants || 0,
 			recentJobs,
+			statusBreakdown: statusBreakdown.reduce((acc, item) => {
+				acc[item._id] = item.count;
+				return acc;
+			}, {}),
+			recentApplications: filteredRecentApplications,
 		});
 	} catch (error) {
 		console.error("Error in getRecruiterDashboard controller:", error);
@@ -58,17 +92,26 @@ export const updateRecruiterCompanyProfile = async (req, res) => {
 		recruiter.companySize = cleanString(req.body.companySize) || recruiter.companySize;
 		recruiter.industry = cleanString(req.body.industry) || recruiter.industry;
 		recruiter.companyLocation = cleanString(req.body.companyLocation) || recruiter.companyLocation;
-		recruiter.aboutCompany = cleanString(req.body.aboutCompany) || recruiter.aboutCompany;
 		recruiter.HRName = cleanString(req.body.HRName) || recruiter.HRName;
+
+		if (Object.prototype.hasOwnProperty.call(req.body, "aboutCompany")) {
+			recruiter.aboutCompany = cleanString(req.body.aboutCompany);
+		}
 
 		if (req.body.companyLogo) {
 			const uploadedLogo = await cloudinary.uploader.upload(req.body.companyLogo);
 			recruiter.companyLogo = uploadedLogo.secure_url;
 		}
+		if (req.body.removeCompanyLogo) {
+			recruiter.companyLogo = "";
+		}
 
 		if (req.body.companyBanner) {
 			const uploadedBanner = await cloudinary.uploader.upload(req.body.companyBanner);
 			recruiter.companyBanner = uploadedBanner.secure_url;
+		}
+		if (req.body.removeCompanyBanner) {
+			recruiter.companyBanner = "";
 		}
 
 		await recruiter.save();
@@ -108,4 +151,3 @@ export const getRecruiterPublicProfile = async (req, res) => {
 		return res.status(500).json({ message: "Server error" });
 	}
 };
-

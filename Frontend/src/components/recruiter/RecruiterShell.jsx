@@ -23,7 +23,9 @@ const RecruiterShell = ({ title, subtitle, children }) => {
           <nav className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname === item.to;
+              const isActive =
+                location.pathname === item.to ||
+                (item.to !== "/recruiter/dashboard" && location.pathname.startsWith(item.to));
               return (
                 <Link
                   key={item.to}
@@ -53,4 +55,3 @@ const RecruiterShell = ({ title, subtitle, children }) => {
 };
 
 export default RecruiterShell;
-

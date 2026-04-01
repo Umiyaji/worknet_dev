@@ -10,7 +10,7 @@ import SkillsSection from "../components/SkillsSection";
 import PostCard from "../components/PostCard";
 
 import toast from "react-hot-toast";
-import { Loader, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
 import { useRef, useState } from "react";
 
 const ProfilePage = () => {
@@ -128,6 +128,16 @@ const ProfilePage = () => {
 
   return (
     <div className="max-w-4xl mx-auto pb-4">
+      <div className="mb-3">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+        >
+          <ArrowLeft size={16} />
+          Back
+        </button>
+      </div>
       <ProfileHeader
         userData={userData}
         isOwnProfile={isOwnProfile}

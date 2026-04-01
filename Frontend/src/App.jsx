@@ -19,10 +19,12 @@ import RecruiterDashboardPage from "./pages/RecruiterDashboardPage";
 import RecruiterJobsPage from "./pages/RecruiterJobsPage";
 import RecruiterJobFormPage from "./pages/RecruiterJobFormPage";
 import RecruiterApplicantsPage from "./pages/RecruiterApplicantsPage";
+import RecruiterApplicantDetailPage from "./pages/RecruiterApplicantDetailPage";
 import RecruiterExcelUploadPage from "./pages/RecruiterExcelUploadPage";
 import JobsListingPage from "./pages/JobsListingPage";
 import JobDetailPage from "./pages/JobDetailPage";
 import RecruiterProfilePage from "./pages/RecruiterProfilePage";
+import MyApplicationsPage from "./pages/MyApplicationsPage";
 
 const RecruiterRoute = ({ authUser, children }) => {
   if (!authUser) return <Navigate to="/login" />;
@@ -54,53 +56,60 @@ function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<HomePage />} />
+        <Route
+          path="/"
+          element={authUser ? <HomePage /> : <Navigate to="/login" replace />}
+        />
         <Route
           path="/signup"
-          element={!authUser ? <SignUpPage /> : <Navigate to={"/"} />}
+          element={!authUser ? <SignUpPage /> : <Navigate to="/" replace />}
         />
         <Route
           path="/login"
-          element={!authUser ? <LoginPage /> : <Navigate to={"/"} />}
+          element={!authUser ? <LoginPage /> : <Navigate to="/" replace />}
         />
         <Route
           path="/signup/recruiter"
-          element={!authUser ? <RecruiterSignUpPage /> : <Navigate to={"/"} />}
+          element={!authUser ? <RecruiterSignUpPage /> : <Navigate to="/" replace />}
         />
         <Route
           path="/create-post"
-          element={authUser ? <PostCreateMobile /> : <Navigate to={"/login"} />}
+          element={authUser ? <PostCreateMobile /> : <Navigate to="/login" replace />}
         />
         <Route
           path="/notifications"
           element={
-            authUser ? <NotificationsPage /> : <Navigate to={"/login"} />
+            authUser ? <NotificationsPage /> : <Navigate to="/login" replace />
           }
         />
         <Route
           path="/Resume"
-          element={authUser ? <Resume /> : <Navigate to={"/login"} />}
+          element={authUser && authUser.role !== "recruiter" ? <Resume /> : <Navigate to={authUser ? "/" : "/login"} replace />}
         />
         <Route
           path="/resume/:username"
-          element={authUser ? <Resume /> : <Navigate to={"/login"} />}
+          element={authUser && authUser.role !== "recruiter" ? <Resume /> : <Navigate to={authUser ? "/" : "/login"} replace />}
         />
 
         <Route
           path="/messages"
-          element={authUser ? <Messages /> : <Navigate to={"/login"} />}
+          element={authUser ? <Messages /> : <Navigate to="/login" replace />}
         />
         <Route
           path="/jobs"
-          element={authUser ? <JobsListingPage /> : <Navigate to={"/login"} />}
+          element={authUser ? <JobsListingPage /> : <Navigate to="/login" replace />}
         />
         <Route
           path="/jobs/:jobId"
-          element={authUser ? <JobDetailPage /> : <Navigate to={"/login"} />}
+          element={authUser ? <JobDetailPage /> : <Navigate to="/login" replace />}
+        />
+        <Route
+          path="/applications"
+          element={authUser ? <MyApplicationsPage /> : <Navigate to="/login" replace />}
         />
         <Route
           path="/company/:username"
-          element={authUser ? <RecruiterProfilePage /> : <Navigate to={"/login"} />}
+          element={authUser ? <RecruiterProfilePage /> : <Navigate to="/login" replace />}
         />
         <Route
           path="/recruiter/dashboard"
@@ -143,6 +152,14 @@ function App() {
           }
         />
         <Route
+          path="/recruiter/jobs/:jobId/applicants/:applicationId"
+          element={
+            <RecruiterRoute authUser={authUser}>
+              <RecruiterApplicantDetailPage />
+            </RecruiterRoute>
+          }
+        />
+        <Route
           path="/recruiter/applicants"
           element={
             <RecruiterRoute authUser={authUser}>
@@ -160,23 +177,23 @@ function App() {
         />
         <Route
           path="/network"
-          element={authUser ? <NetworkPage /> : <Navigate to={"/login"} />}
+          element={authUser ? <NetworkPage /> : <Navigate to="/login" replace />}
         />
         <Route
           path="/post/:postId"
-          element={authUser ? <PostSharePage /> : <Navigate to={"/login"} />}
+          element={authUser ? <PostSharePage /> : <Navigate to="/login" replace />}
         />
         <Route
           path="/posts/:postId"
-          element={authUser ? <PostSharePage /> : <Navigate to={"/login"} />}
+          element={authUser ? <PostSharePage /> : <Navigate to="/login" replace />}
         />
         <Route
           path="/profile/:username"
-          element={authUser ? <ProfilePage /> : <Navigate to={"/login"} />}
+          element={authUser ? <ProfilePage /> : <Navigate to="/login" replace />}
         />
         <Route
           path="/suggestions"
-          element={authUser ? <SuggestionsPage /> : <Navigate to={"/login"} />}
+          element={authUser ? <SuggestionsPage /> : <Navigate to="/login" replace />}
         />
       </Routes>
       <Toaster />

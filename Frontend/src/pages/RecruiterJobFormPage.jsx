@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 const initialFormState = {
+  companyName: "",
   title: "",
   description: "",
   skillsRequired: "",
@@ -21,6 +22,7 @@ const RecruiterJobFormPage = () => {
   const isEditMode = Boolean(jobId);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const authUser = queryClient.getQueryData(["authUser"]);
   const [formData, setFormData] = useState(initialFormState);
 
   const { data: existingJob } = useQuery({
@@ -35,6 +37,7 @@ const RecruiterJobFormPage = () => {
   useEffect(() => {
     if (existingJob) {
       setFormData({
+        companyName: existingJob.companyName || existingJob.companyId?.companyName || authUser?.companyName || "",
         title: existingJob.title || "",
         description: existingJob.description || "",
         skillsRequired: (existingJob.skillsRequired || []).join(", "),
@@ -45,7 +48,13 @@ const RecruiterJobFormPage = () => {
         lastDateToApply: existingJob.lastDateToApply ? new Date(existingJob.lastDateToApply).toISOString().slice(0, 10) : "",
       });
     }
-  }, [existingJob]);
+  }, [existingJob, authUser?.companyName]);
+
+  useEffect(() => {
+    if (!isEditMode && authUser?.companyName) {
+      setFormData((prev) => ({ ...prev, companyName: authUser.companyName }));
+    }
+  }, [isEditMode, authUser?.companyName]);
 
   const payload = useMemo(
     () => ({
@@ -90,6 +99,16 @@ const RecruiterJobFormPage = () => {
         }}
         className="rounded-2xl bg-white border border-slate-200 p-5 space-y-4"
       >
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Company Name</label>
+          <input
+            required
+            value={formData.companyName}
+            onChange={(e) => setFormData((prev) => ({ ...prev, companyName: e.target.value }))}
+            placeholder="Company name"
+            className="w-full rounded-md border border-slate-300 px-3 py-2"
+          />
+        </div>
         <input
           required
           value={formData.title}
@@ -142,13 +161,16 @@ const RecruiterJobFormPage = () => {
             placeholder="Salary range (optional)"
             className="rounded-md border border-slate-300 px-3 py-2"
           />
-          <input
-            required
-            type="date"
-            value={formData.lastDateToApply}
-            onChange={(e) => setFormData((prev) => ({ ...prev, lastDateToApply: e.target.value }))}
-            className="rounded-md border border-slate-300 px-3 py-2"
-          />
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Last date to apply</label>
+            <input
+              required
+              type="date"
+              value={formData.lastDateToApply}
+              onChange={(e) => setFormData((prev) => ({ ...prev, lastDateToApply: e.target.value }))}
+              className="w-full rounded-md border border-slate-300 px-3 py-2"
+            />
+          </div>
         </div>
 
         <button

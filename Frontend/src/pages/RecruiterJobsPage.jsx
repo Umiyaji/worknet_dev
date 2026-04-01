@@ -3,9 +3,11 @@ import { axiosInstance } from "../lib/axios";
 import RecruiterShell from "../components/recruiter/RecruiterShell";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
+import CompanyLogo from "../components/CompanyLogo";
 
 const RecruiterJobsPage = () => {
   const queryClient = useQueryClient();
+  const authUser = queryClient.getQueryData(["authUser"]);
 
   const { data: jobs = [], isLoading } = useQuery({
     queryKey: ["recruiterJobs"],
@@ -45,18 +47,50 @@ const RecruiterJobsPage = () => {
         {isLoading ? (
           <p className="text-sm text-slate-500">Loading jobs...</p>
         ) : jobs.length ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {jobs.map((job) => (
-              <div key={job._id} className="rounded-xl border border-slate-200 p-4">
-                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-slate-900">{job.title}</p>
-                    <p className="text-sm text-slate-600">
-                      {job.location} • {job.jobType} • {job.experienceRequired}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Apply by {new Date(job.lastDateToApply).toLocaleDateString()}
-                    </p>
+              <div key={job._id} className="rounded-2xl border border-slate-200 p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="flex items-start gap-3">
+                    <CompanyLogo
+                      src={authUser?.companyLogo}
+                      name={authUser?.companyName || "Company"}
+                      className="h-10 w-10 rounded-lg object-cover border border-slate-200 bg-white"
+                    />
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-slate-900">{job.title}</p>
+                        {job.isExpired ? (
+                          <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
+                            Closed
+                          </span>
+                        ) : (
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-slate-600 mt-1">
+                        {job.location} | {job.jobType} | {job.experienceRequired}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Apply by {new Date(job.lastDateToApply).toLocaleDateString()}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                          {job.totalApplicants || 0} applicants
+                        </span>
+                        <span className="rounded-full bg-amber-50 px-3 py-1 text-xs text-amber-700">
+                          Reviewing {job.statusBreakdown?.reviewing || 0}
+                        </span>
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs text-emerald-700">
+                          Shortlisted {job.statusBreakdown?.shortlisted || 0}
+                        </span>
+                        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-700">
+                          Hired {job.statusBreakdown?.hired || 0}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Link
@@ -99,4 +133,3 @@ const RecruiterJobsPage = () => {
 };
 
 export default RecruiterJobsPage;
-

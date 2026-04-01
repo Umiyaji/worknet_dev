@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const jobSchema = new mongoose.Schema(
 	{
+		companyName: { type: String, required: true, trim: true },
 		title: { type: String, required: true, trim: true },
 		description: { type: String, required: true, trim: true },
 		skillsRequired: [{ type: String, trim: true }],
@@ -33,4 +34,3 @@ jobSchema.index({ isActive: 1, jobType: 1, location: 1, createdAt: -1 });
 
 const Job = mongoose.model("Job", jobSchema);
 export default Job;
-

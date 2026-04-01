@@ -11,8 +11,8 @@ import {
   User,
   Users,
   SquarePlus,
-  X,
   Building2,
+  ClipboardList,
 } from "lucide-react";
 import WorkOutlineIcon from "@mui/icons-material/WorkOutline";
 import ChatBubbleOutlineOutlinedIcon from "@mui/icons-material/ChatBubbleOutlineOutlined";
@@ -59,7 +59,9 @@ const Navbar = () => {
   const { mutate: logout } = useMutation({
     mutationFn: () => axiosInstance.post("/auth/logout"),
     onSuccess: () => {
+      queryClient.setQueryData(["authUser"], null);
       queryClient.invalidateQueries({ queryKey: ["authUser"] });
+      navigate("/login", { replace: true });
       toast.success("Logged out successfully");
     },
     onError: () => {
@@ -192,8 +194,8 @@ const Navbar = () => {
             <div className="flex items-center justify-center gap-4">
               <Link to="/">
                 <img
-                  className="h-14 rounded"
-                  src="/worknet_logo_1.png"
+                  className="h-10 w-10 object-contain"
+                  src="/favicon-logo1.png"
                   alt="Worknet"
                 />
               </Link>
@@ -308,13 +310,15 @@ const Navbar = () => {
                         )}
                       </Link>
 
-                      <Link
-                        to="/Resume"
-                        className="text-neutral flex flex-col items-center relative"
-                      >
-                        <WorkOutlineIcon size={20} />
-                        <span className="text-xs hidden md:block">Resume</span>
-                      </Link>
+                      {authUser?.role !== "recruiter" && (
+                        <Link
+                          to="/Resume"
+                          className="text-neutral flex flex-col items-center relative"
+                        >
+                          <WorkOutlineIcon size={20} />
+                          <span className="text-xs hidden md:block">Resume</span>
+                        </Link>
+                      )}
 
                       <Link
                         to="/messages"
@@ -339,13 +343,25 @@ const Navbar = () => {
                         <span className="text-xs hidden md:block">Jobs</span>
                       </Link>
 
+                      {authUser?.role !== "recruiter" && (
+                        <Link
+                          to="/applications"
+                          className="text-neutral flex flex-col items-center relative"
+                        >
+                          <ClipboardList size={20} />
+                          <span className="text-xs hidden md:block">Applications</span>
+                        </Link>
+                      )}
+
                       {authUser?.role === "recruiter" && (
                         <Link
                           to="/recruiter/dashboard"
                           className="text-neutral flex flex-col items-center relative"
                         >
                           <Building2 size={20} />
-                          <span className="text-xs hidden md:block">Recruiter</span>
+                          <span className="text-xs hidden md:block">
+                            Recruiter
+                          </span>
                         </Link>
                       )}
                     </div>
@@ -373,7 +389,11 @@ const Navbar = () => {
                         className="focus:outline-none text-neutral flex flex-col items-center cursor-pointer"
                       >
                         <img
-                          src={authUser?.profilePicture || "/avatar.png"}
+                          src={
+                            authUser?.role === "recruiter"
+                              ? authUser?.companyLogo || authUser?.profilePicture || "/avatar.png"
+                              : authUser?.profilePicture || "/avatar.png"
+                          }
                           alt={authUser?.name || "Profile"}
                           className="size-8 md:size-[22px] lg:size-[22px] rounded-full object-cover border border-gray-300 hover:opacity-90 transition"
                         />

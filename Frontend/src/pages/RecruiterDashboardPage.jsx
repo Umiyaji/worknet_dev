@@ -1,22 +1,15 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { axiosInstance } from "../lib/axios";
 import RecruiterShell from "../components/recruiter/RecruiterShell";
 import { Loader2 } from "lucide-react";
-import toast from "react-hot-toast";
-import { useState } from "react";
+import { Link } from "react-router-dom";
+import CompanyLogo from "../components/CompanyLogo";
+
+const recruiterStatuses = ["applied", "reviewing", "shortlisted", "rejected", "hired"];
 
 const RecruiterDashboardPage = () => {
   const queryClient = useQueryClient();
   const authUser = queryClient.getQueryData(["authUser"]);
-  const [companyForm, setCompanyForm] = useState({
-    companyName: authUser?.companyName || "",
-    companyWebsite: authUser?.companyWebsite || "",
-    companySize: authUser?.companySize || "",
-    industry: authUser?.industry || "",
-    companyLocation: authUser?.companyLocation || "",
-    aboutCompany: authUser?.aboutCompany || "",
-    HRName: authUser?.HRName || "",
-  });
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["recruiterDashboard"],
@@ -25,22 +18,6 @@ const RecruiterDashboardPage = () => {
       return res.data;
     },
   });
-
-  const { mutate: updateCompanyProfile, isPending: isSavingCompanyProfile } = useMutation({
-    mutationFn: async (payload) => {
-      const res = await axiosInstance.put("/recruiter/company-profile", payload);
-      return res.data;
-    },
-    onSuccess: () => {
-      toast.success("Company profile updated");
-      queryClient.invalidateQueries({ queryKey: ["authUser"] });
-    },
-    onError: (error) => {
-      toast.error(error.response?.data?.message || "Failed to update company profile");
-    },
-  });
-
-  const needsCompanyProfile = !(authUser?.companyName && authUser?.industry && authUser?.companyLocation);
 
   if (isLoading) {
     return (
@@ -62,75 +39,7 @@ const RecruiterDashboardPage = () => {
 
   return (
     <RecruiterShell title="Recruiter Dashboard" subtitle="Track jobs, applicants, and hiring activity">
-      {needsCompanyProfile && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-          <h3 className="text-lg font-semibold text-amber-900">Complete Company Profile</h3>
-          <p className="text-sm text-amber-800 mb-4">
-            Add your company details so candidates can trust your job postings.
-          </p>
-          <form
-            className="grid grid-cols-1 md:grid-cols-2 gap-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              updateCompanyProfile(companyForm);
-            }}
-          >
-            <input
-              required
-              value={companyForm.companyName}
-              onChange={(e) => setCompanyForm((prev) => ({ ...prev, companyName: e.target.value }))}
-              placeholder="Company name"
-              className="rounded-md border border-amber-200 px-3 py-2 bg-white"
-            />
-            <input
-              value={companyForm.companyWebsite}
-              onChange={(e) => setCompanyForm((prev) => ({ ...prev, companyWebsite: e.target.value }))}
-              placeholder="Company website"
-              className="rounded-md border border-amber-200 px-3 py-2 bg-white"
-            />
-            <input
-              value={companyForm.industry}
-              onChange={(e) => setCompanyForm((prev) => ({ ...prev, industry: e.target.value }))}
-              placeholder="Industry"
-              className="rounded-md border border-amber-200 px-3 py-2 bg-white"
-            />
-            <input
-              value={companyForm.companyLocation}
-              onChange={(e) => setCompanyForm((prev) => ({ ...prev, companyLocation: e.target.value }))}
-              placeholder="Company location"
-              className="rounded-md border border-amber-200 px-3 py-2 bg-white"
-            />
-            <input
-              value={companyForm.companySize}
-              onChange={(e) => setCompanyForm((prev) => ({ ...prev, companySize: e.target.value }))}
-              placeholder="Company size"
-              className="rounded-md border border-amber-200 px-3 py-2 bg-white"
-            />
-            <input
-              value={companyForm.HRName}
-              onChange={(e) => setCompanyForm((prev) => ({ ...prev, HRName: e.target.value }))}
-              placeholder="HR Name (optional)"
-              className="rounded-md border border-amber-200 px-3 py-2 bg-white"
-            />
-            <textarea
-              value={companyForm.aboutCompany}
-              onChange={(e) => setCompanyForm((prev) => ({ ...prev, aboutCompany: e.target.value }))}
-              placeholder="About company"
-              rows={3}
-              className="rounded-md border border-amber-200 px-3 py-2 bg-white md:col-span-2"
-            />
-            <button
-              type="submit"
-              disabled={isSavingCompanyProfile}
-              className="rounded-md bg-slate-900 px-4 py-2 text-white hover:bg-slate-800 md:col-span-2"
-            >
-              {isSavingCompanyProfile ? "Saving..." : "Save company profile"}
-            </button>
-          </form>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="rounded-2xl bg-white border border-slate-200 p-5">
           <p className="text-sm text-slate-500">Total Jobs Posted</p>
           <p className="text-3xl font-bold text-slate-900 mt-1">{data.totalJobsPosted}</p>
@@ -145,26 +54,119 @@ const RecruiterDashboardPage = () => {
         </div>
       </div>
 
-      <div className="rounded-2xl bg-white border border-slate-200 p-5">
-        <h3 className="text-lg font-semibold text-slate-900 mb-3">Recent Job Posts</h3>
-        {data.recentJobs?.length ? (
-          <div className="space-y-2">
-            {data.recentJobs.map((job) => (
-              <div key={job._id} className="rounded-lg border border-slate-200 p-3 flex justify-between items-center">
-                <div>
-                  <p className="font-medium text-slate-900">{job.title}</p>
-                  <p className="text-sm text-slate-500">
-                    {job.location} • {job.jobType}
-                  </p>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-2xl bg-white border border-slate-200 p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Recent Job Posts</h3>
+              <p className="text-sm text-slate-500">Quick access to your latest openings</p>
+            </div>
+            <Link to="/recruiter/jobs" className="text-sm font-medium text-slate-700 hover:text-slate-900">
+              View all jobs
+            </Link>
+          </div>
+
+          {data.recentJobs?.length ? (
+            <div className="space-y-2">
+              {data.recentJobs.map((job) => (
+                <Link
+                  key={job._id}
+                  to={`/recruiter/jobs/${job._id}/applicants`}
+                  className="block rounded-lg border border-slate-200 p-3 transition hover:border-slate-300 hover:bg-slate-50"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <CompanyLogo
+                        src={authUser?.companyLogo}
+                        name={authUser?.companyName || "Company"}
+                        className="h-9 w-9 rounded-lg object-cover border border-slate-200 bg-white"
+                      />
+                      <div>
+                        <p className="font-medium text-slate-900">{job.title}</p>
+                        <p className="text-sm text-slate-500">
+                          {job.location} | {job.jobType}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Apply by {new Date(job.lastDateToApply).toLocaleDateString()}
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">No jobs posted yet.</p>
+          )}
+        </div>
+
+        <div className="rounded-2xl bg-white border border-slate-200 p-5">
+          <h3 className="text-lg font-semibold text-slate-900">Pipeline Breakdown</h3>
+          <p className="text-sm text-slate-500">Live status distribution across your applicants</p>
+          <div className="mt-4 space-y-3">
+            {recruiterStatuses.map((status) => (
+              <div key={status}>
+                <div className="mb-1 flex items-center justify-between text-sm">
+                  <span className="capitalize text-slate-700">{status}</span>
+                  <span className="font-medium text-slate-900">{data.statusBreakdown?.[status] || 0}</span>
                 </div>
-                <p className="text-xs text-slate-500">
-                  Apply by {new Date(job.lastDateToApply).toLocaleDateString()}
-                </p>
+                <div className="h-2 rounded-full bg-slate-100">
+                  <div
+                    className="h-2 rounded-full bg-slate-900"
+                    style={{
+                      width: `${data.totalApplicants ? ((data.statusBreakdown?.[status] || 0) / data.totalApplicants) * 100 : 0}%`,
+                    }}
+                  />
+                </div>
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-white border border-slate-200 p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Recent Applications</h3>
+            <p className="text-sm text-slate-500">Newest candidates entering your hiring pipeline</p>
+          </div>
+          <Link to="/recruiter/applicants" className="text-sm font-medium text-slate-700 hover:text-slate-900">
+            Open applicant manager
+          </Link>
+        </div>
+
+        {data.recentApplications?.length ? (
+          <div className="space-y-3">
+            {data.recentApplications.map((application) => (
+              <Link
+                key={application._id}
+                to={`/recruiter/jobs/${application.jobId?._id}/applicants/${application._id}`}
+                className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 hover:bg-slate-50 md:flex-row md:items-center md:justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <img
+                    src={application.userId?.profilePicture || "/avatar.png"}
+                    alt={application.userId?.name || application.fullName || "Applicant"}
+                    className="h-11 w-11 rounded-xl object-cover border border-slate-200 bg-white"
+                  />
+                  <div>
+                    <p className="font-medium text-slate-900">{application.fullName || application.userId?.name}</p>
+                    <p className="text-sm text-slate-500">
+                      {application.jobId?.title || "Job"} | {application.email}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 capitalize text-slate-700">
+                    {application.status}
+                  </span>
+                  <span className="text-slate-500">{new Date(application.createdAt).toLocaleDateString()}</span>
+                </div>
+              </Link>
+            ))}
+          </div>
         ) : (
-          <p className="text-sm text-slate-500">No jobs posted yet.</p>
+          <p className="text-sm text-slate-500">No applications received yet.</p>
         )}
       </div>
     </RecruiterShell>
@@ -172,4 +174,3 @@ const RecruiterDashboardPage = () => {
 };
 
 export default RecruiterDashboardPage;
-

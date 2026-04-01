@@ -6,7 +6,9 @@ export const getUserNotifications = async (req, res) => {
 			.sort({ createdAt: -1 })
 			.populate("relatedUser", "name username profilePicture")
 			.populate("relatedPost", "content image")
-			.populate("relatedMessage", "text image createdAt");
+			.populate("relatedMessage", "text image createdAt")
+			.populate("relatedJob", "title companyName")
+			.populate("relatedApplication", "status fullName");
 
 		res.status(200).json(notifications);
 	} catch (error) {
