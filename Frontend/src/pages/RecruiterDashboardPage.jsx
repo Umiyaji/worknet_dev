@@ -54,6 +54,40 @@ const RecruiterDashboardPage = () => {
         </div>
       </div>
 
+      <div className="rounded-2xl bg-white border border-slate-200 p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Automated Job Posting</h3>
+            <p className="text-sm text-slate-500">Excel-like row pipeline for draft, scheduled, and posted jobs</p>
+          </div>
+          <Link
+            to="/recruiter/automated-jobs"
+            className="text-sm font-medium text-slate-700 hover:text-slate-900"
+          >
+            Open automation table
+          </Link>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs text-slate-500">Total Rows</p>
+            <p className="text-xl font-semibold text-slate-900">{data.automatedJobRows?.total || 0}</p>
+          </div>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs text-amber-700">Scheduled</p>
+            <p className="text-xl font-semibold text-amber-800">{data.automatedJobRows?.scheduled || 0}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-100 p-3">
+            <p className="text-xs text-slate-600">Draft</p>
+            <p className="text-xl font-semibold text-slate-800">{data.automatedJobRows?.draft || 0}</p>
+          </div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+            <p className="text-xs text-emerald-700">Posted</p>
+            <p className="text-xl font-semibold text-emerald-800">{data.automatedJobRows?.posted || 0}</p>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-2xl bg-white border border-slate-200 p-5">
           <div className="mb-4 flex items-center justify-between gap-3">

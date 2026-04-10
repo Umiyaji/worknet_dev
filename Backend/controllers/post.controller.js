@@ -2,7 +2,6 @@ import cloudinary from "../lib/cloudinary.js";
 import Post from "../models/post.model.js";
 import User from "../models/user.model.js"
 import Notification from "../models/notification.model.js";
-import { sendCommentNotificationEmail } from "../emails/emailHandlers.js";
 
 const normalizeSkills = (skillsRequired) => {
 	if (Array.isArray(skillsRequired)) {
@@ -125,15 +124,83 @@ const validateAutomationPayload = ({
 	return null;
 };
 
+const normalizeTargetContext = (value) =>
+	typeof value === "string" ? value.trim().toLowerCase() : "";
+
+const sanitizeJobDetailsForViewer = (jobDetails, viewer, { isOwner = false } = {}) => {
+	if (!jobDetails) {
+		return jobDetails;
+	}
+
+	if (isOwner || viewer?.role === "recruiter") {
+		return jobDetails;
+	}
+
+	const sanitizedDetails = { ...jobDetails };
+	delete sanitizedDetails.targetColleges;
+	delete sanitizedDetails.targetCities;
+	return sanitizedDetails;
+};
+
 
 export const getFeedPosts = async (req, res) => {
 	try {
-		const posts = await Post.find({ author: { $in: [...req.user.connections, req.user._id] } })
+		const now = new Date();
+		const college = normalizeTargetContext(req.user?.college);
+		const city = normalizeTargetContext(req.user?.city);
+		const targetedMatchOr = [];
+		if (college) {
+			targetedMatchOr.push({ "jobDetails.targetColleges": { $in: [college] } });
+		}
+		if (city) {
+			targetedMatchOr.push({ "jobDetails.targetCities": { $in: [city] } });
+		}
+
+		const publicOrLegacyJobVisibility = [
+			{ "jobDetails.visibilityType": "public" },
+			{ "jobDetails.visibilityType": { $exists: false } },
+		];
+		const jobVisibilityFilters =
+			targetedMatchOr.length > 0
+				? [
+						...publicOrLegacyJobVisibility,
+						{
+							"jobDetails.visibilityType": "targeted",
+							$or: targetedMatchOr,
+						},
+				  ]
+				: publicOrLegacyJobVisibility;
+
+		const posts = await Post.find({
+			$or: [
+				{
+					postType: "job",
+					publishAt: { $lte: now },
+					$or: jobVisibilityFilters,
+				},
+				{
+					postType: { $ne: "job" },
+					author: { $in: [...req.user.connections, req.user._id] },
+					publishAt: { $lte: now },
+				},
+			],
+		})
 			.populate("author", "name username profilePicture headline")
 			.populate("comments.user", "name profilePicture")
-			.sort({ createdAt: -1 });
+			.sort({ publishAt: -1, createdAt: -1 });
 
-		res.status(200).json(posts);
+		res.status(200).json(
+			posts.map((post) => {
+				const isOwner = req.user?._id?.toString() === post.author?._id?.toString();
+				const postObject = post.toObject();
+
+				if (postObject.postType === "job" && postObject.jobDetails) {
+					postObject.jobDetails = sanitizeJobDetailsForViewer(postObject.jobDetails, req.user, { isOwner });
+				}
+
+				return postObject;
+			})
+		);
 	} catch (error) {
 		console.error("Error in getFeedPosts controller:", error);
 		res.status(500).json({ message: "Server error" });
@@ -294,6 +361,9 @@ export const updatePost = async (req, res) => {
 
 		const post = await Post.findById(id);
 		if (!post) return res.status(404).json({ message: "Post not found" });
+		if (post.relatedJob) {
+			return res.status(400).json({ message: "Job posts are managed from the jobs section" });
+		}
 
 		if (post.author.toString() !== userId.toString()) {
 			return res.status(403).json({ message: "You can't edit this post" });
@@ -321,6 +391,9 @@ export const deletePost = async (req, res) => {
 		if (!post) {
 			return res.status(404).json({ message: "Post not found" });
 		}
+		if (post.relatedJob) {
+			return res.status(400).json({ message: "Delete the job from the jobs section to remove this post" });
+		}
 
 		if (post.author.toString() !== userId.toString()) {
 			return res.status(403).json({ message: "You are not authorized to delete this post" });
@@ -346,7 +419,33 @@ export const getPostById = async (req, res) => {
 			.populate("author", "name username profilePicture headline")
 			.populate("comments.user", "name profilePicture username headline");
 
-		res.status(200).json(post);
+		if (!post) {
+			return res.status(404).json({ message: "Post not found" });
+		}
+
+		const isOwner = req.user?._id?.toString() === post.author?._id?.toString();
+		if (post.publishAt && new Date(post.publishAt).getTime() > Date.now() && !isOwner) {
+			return res.status(404).json({ message: "Post not found" });
+		}
+
+		if (!isOwner && post.postType === "job" && post.jobDetails?.visibilityType === "targeted") {
+			const college = normalizeTargetContext(req.user?.college);
+			const city = normalizeTargetContext(req.user?.city);
+			const targetColleges = Array.isArray(post.jobDetails?.targetColleges) ? post.jobDetails.targetColleges : [];
+			const targetCities = Array.isArray(post.jobDetails?.targetCities) ? post.jobDetails.targetCities : [];
+			const matchesCollege = college && targetColleges.includes(college);
+			const matchesCity = city && targetCities.includes(city);
+			if (!matchesCollege && !matchesCity) {
+				return res.status(404).json({ message: "Post not found" });
+			}
+		}
+
+		const postObject = post.toObject();
+		if (postObject.postType === "job" && postObject.jobDetails) {
+			postObject.jobDetails = sanitizeJobDetailsForViewer(postObject.jobDetails, req.user, { isOwner });
+		}
+
+		res.status(200).json(postObject);
 	} catch (error) {
 		console.error("Error in getPostById controller:", error);
 		res.status(500).json({ message: "Server error" });
@@ -359,11 +458,6 @@ export const createComment = async (req, res) => {
 		const postId = req.params.id;
 		const { content } = req.body;
 		const userId = req.user._id;
-
-		const commenter = await User.findById(userId).select("name email username");
-		if (!commenter) {
-			return res.status(404).json({ message: "Commenter not found" });
-		}
 
 		const updatedPost = await Post.findByIdAndUpdate(
 			postId,
@@ -396,21 +490,8 @@ export const createComment = async (req, res) => {
 						relatedPost: postId,
 					});
 					await newNotification.save();
-
-					// const postUrl = `${process.env.CLIENT_URL || "https://worknet-clone-dev.vercel.app"}/post/${postId}`;
-					const postUrl = `${process.env.CLIENT_URL}/post/${postId}`;
-
-					console.log("Sending comment email to:", postWithAuthor.author.email);
-					await sendCommentNotificationEmail(
-						postWithAuthor.author.email,
-						postWithAuthor.author.name,
-						commenter.name,
-						postUrl,
-						content
-					);
-					console.log("Comment notification email sent successfully!");
 				} catch (emailError) {
-					console.error("Error sending comment notification email:", emailError);
+					console.error("Error while creating comment notification:", emailError);
 				}
 			})();
 		}
@@ -457,10 +538,16 @@ export const getUserPosts = async (req, res) => {
 		}
 
 		// Get all posts by this user
-		const posts = await Post.find({ author: user._id })
+		const postQuery = { author: user._id };
+		const isOwner = req.user?._id?.toString() === user._id.toString();
+		if (!isOwner) {
+			postQuery.publishAt = { $lte: new Date() };
+		}
+
+		const posts = await Post.find(postQuery)
 			.populate("author", "name username profilePicture headline")
 			.populate("comments.user", "name profilePicture username headline")
-			.sort({ createdAt: -1 });
+			.sort({ publishAt: -1, createdAt: -1 });
 
 		res.status(200).json(posts);
 	} catch (error) {

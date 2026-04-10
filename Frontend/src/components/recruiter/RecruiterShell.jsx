@@ -6,7 +6,7 @@ const navItems = [
   { label: "My Jobs", to: "/recruiter/jobs", icon: BriefcaseBusiness },
   { label: "Post Job", to: "/recruiter/jobs/new", icon: PlusCircle },
   { label: "Applicants", to: "/recruiter/applicants", icon: Users },
-  { label: "Upload Excel", to: "/recruiter/jobs/upload-excel", icon: FileSpreadsheet },
+  { label: "Automated Posting", to: "/recruiter/automated-jobs", icon: FileSpreadsheet },
 ];
 
 const RecruiterShell = ({ title, subtitle, children }) => {
@@ -14,7 +14,7 @@ const RecruiterShell = ({ title, subtitle, children }) => {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 px-4 py-6">
+      <div className="mx-auto max-w-7xl grid grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-[280px_1fr]">
         <aside className="rounded-2xl bg-slate-900 p-4 text-slate-100 shadow-lg h-fit sticky top-24">
           <div className="mb-6 px-2">
             <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Recruiter</p>
@@ -23,9 +23,20 @@ const RecruiterShell = ({ title, subtitle, children }) => {
           <nav className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive =
-                location.pathname === item.to ||
-                (item.to !== "/recruiter/dashboard" && location.pathname.startsWith(item.to));
+              const isActive = (() => {
+                if (item.to === "/recruiter/jobs") {
+                  return location.pathname === "/recruiter/jobs";
+                }
+
+                if (item.to === "/recruiter/jobs/new") {
+                  return location.pathname === "/recruiter/jobs/new";
+                }
+
+                return (
+                  location.pathname === item.to ||
+                  (item.to !== "/recruiter/dashboard" && location.pathname.startsWith(item.to))
+                );
+              })();
               return (
                 <Link
                   key={item.to}

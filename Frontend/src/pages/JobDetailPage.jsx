@@ -133,6 +133,7 @@ const JobDetailPage = () => {
   const isRecruiter = authUser?.role === "recruiter";
   const alreadyApplied = Boolean(job.hasApplied || job.myApplication);
   const recruiterUsername = job.companyId?.username;
+  const canViewExactTargeting = isRecruiter || job.companyId?._id === authUser?._id;
 
   return (
     <div className="max-w-4xl mx-auto space-y-4">
@@ -151,6 +152,11 @@ const JobDetailPage = () => {
           </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-200">
+          {job.visibilityType === "targeted" ? (
+            <span className="inline-flex items-center gap-2 rounded-full bg-indigo-500/30 px-3 py-1.5 text-indigo-100">
+              Targeted Hiring
+            </span>
+          ) : null}
           <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5">
             <MapPin size={16} /> {job.location}
           </span>
@@ -200,6 +206,29 @@ const JobDetailPage = () => {
           ))}
         </div>
       </div>
+
+      {job.visibilityType === "targeted" ? (
+        <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-6">
+          <h3 className="text-lg font-semibold text-indigo-900 mb-2">Targeted Hiring</h3>
+          <p className="text-sm text-indigo-700 mb-3">
+            This role is currently part of a targeted hiring campaign.
+          </p>
+          {canViewExactTargeting ? (
+            <div className="flex flex-wrap gap-2">
+              {(job.targetColleges || []).map((college) => (
+                <span key={`college-${college}`} className="rounded-full bg-white px-3 py-1 text-xs text-indigo-700">
+                  College: {college}
+                </span>
+              ))}
+              {(job.targetCities || []).map((city) => (
+                <span key={`city-${city}`} className="rounded-full bg-white px-3 py-1 text-xs text-indigo-700">
+                  City: {city}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {!isRecruiter && (
         <div className="rounded-2xl bg-white border border-slate-200 p-6">

@@ -3,6 +3,8 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+const { SMTP_USER, SMTP_PASS, SENDER_NAME, SENDER_EMAIL } = process.env;
+
 export const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 465,
@@ -10,14 +12,19 @@ export const transporter = nodemailer.createTransport({
     // port: 587,
     // secure: false,
     auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user: SMTP_USER,
+        pass: SMTP_PASS,
     },
 });
 
-export const sender = `${process.env.SENDER_NAME} <${process.env.SENDER_EMAIL}>`;
+export const sender = `${SENDER_NAME || "Worknet"} <${SENDER_EMAIL || SMTP_USER}>`;
 
 transporter.verify((error, success) => {
+    if (!SMTP_USER || !SMTP_PASS) {
+        console.warn("SMTP credentials are missing. Add SMTP_USER and SMTP_PASS in Backend/.env to enable email delivery.");
+        return;
+    }
+
     if (error) {
         console.error("SMTP connection error:", error);
     } else {

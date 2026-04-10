@@ -1,9 +1,22 @@
 import { sender, transporter } from "../lib/nodemailer.js";
+import path from "path";
+import { fileURLToPath } from "url";
 import {
-	createCommentNotificationEmailTemplate,
-	createConnectionAcceptedEmailTemplate,
 	createWelcomeEmailTemplate,
+	createSignupOtpEmailTemplate,
 } from "./emailTemplates.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const logoPath = path.resolve(__dirname, "../../Frontend/public/favicon-logo1.png");
+
+const sharedAttachments = [
+	{
+		filename: "favicon-logo1.png",
+		path: logoPath,
+		cid: "worknet-logo",
+	},
+];
 
 export const sendWelcomeEmail = async (email, name, profileUrl) => {
 
@@ -13,6 +26,7 @@ export const sendWelcomeEmail = async (email, name, profileUrl) => {
 			to: email,
 			subject: "Welcome to Worknet!",
 			html: createWelcomeEmailTemplate(name, profileUrl),
+			attachments: sharedAttachments,
 			category: "welcome",
 		});
 
@@ -22,54 +36,20 @@ export const sendWelcomeEmail = async (email, name, profileUrl) => {
 	}
 };
 
-export const sendCommentNotificationEmail = async (
-	recipientEmail,
-	recipientName,
-	commenterName,
-	postUrl,
-	commentContent
-) => {
-
+export const sendSignupOtpEmail = async (email, name, otpCode) => {
 	try {
+		const appUrl = (process.env.CLIENT_URL || "http://localhost:5173").replace(/\/$/, "");
 		const response = await transporter.sendMail({
 			from: sender,
-			to: recipientEmail,
-			subject: "New Comment on Your Post",
-			html: createCommentNotificationEmailTemplate(
-				recipientName,
-				commenterName,
-				postUrl,
-				commentContent
-			),
-			category: "comment_notification",
+			to: email,
+			subject: "Your Worknet verification code",
+			html: createSignupOtpEmailTemplate(name, otpCode, appUrl),
+			attachments: sharedAttachments,
+			category: "email-verification",
 		});
-		console.log("Comment Notification Email sent successfully", response);
+
+		console.log("Signup OTP Email sent successfully", response);
 	} catch (error) {
 		throw error;
-	}
-};
-
-export const sendConnectionAcceptedEmail = async (
-	senderEmail,
-	senderName,
-	recipientName,
-	profileUrl
-) => {
-
-	try {
-		const response = await transporter.sendMail({
-			from: sender,
-			to: senderEmail,
-			subject: `${recipientName} accepted your connection request`,
-			html: createConnectionAcceptedEmailTemplate(
-				senderName,
-				recipientName,
-				profileUrl
-			),
-			category: "connection_accepted",
-		});
-	} catch (error) {
-
-		console.error("Error sending connection accepted email:", error);
 	}
 };

@@ -6,6 +6,28 @@ import path from "path";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 const CURRENT_TOKENS = new Set(["present", "current", "ongoing", "now", "till date", "today"]);
 
+const getMimeTypeFromExtension = (filePath = "") => {
+	const extension = path.extname(filePath).toLowerCase();
+
+	switch (extension) {
+		case ".pdf":
+			return "application/pdf";
+		case ".doc":
+			return "application/msword";
+		case ".docx":
+			return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+		case ".jpg":
+		case ".jpeg":
+			return "image/jpeg";
+		case ".png":
+			return "image/png";
+		case ".webp":
+			return "image/webp";
+		default:
+			return "";
+	}
+};
+
 const deleteLocalResumeIfExists = async (resumeUrl) => {
 	if (!resumeUrl || !resumeUrl.includes("/uploads/resumes/")) {
 		return;
@@ -62,6 +84,7 @@ const extractJsonFromText = (text) => {
 };
 
 const normalizeString = (value) => (typeof value === "string" ? value.trim() : "");
+const normalizeTargetProfileString = (value) => normalizeString(value).toLowerCase();
 
 const normalizeSkills = (skills) => {
 	if (!Array.isArray(skills)) {
@@ -186,6 +209,11 @@ const extractProfileDataFromResume = async (filePath, mimetype) => {
 
 	const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 	const fileBuffer = await fs.readFile(filePath);
+	const normalizedMimeType = mimetype || getMimeTypeFromExtension(filePath);
+
+	if (!normalizedMimeType) {
+		return null;
+	}
 
 	const response = await fetch(
 		`${GEMINI_API_URL}/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
@@ -201,7 +229,7 @@ const extractProfileDataFromResume = async (filePath, mimetype) => {
 							{ text: getResumeExtractionPrompt() },
 							{
 								inline_data: {
-									mime_type: mimetype,
+									mime_type: normalizedMimeType,
 									data: fileBuffer.toString("base64"),
 								},
 							},
@@ -284,6 +312,8 @@ export const updateProfile = async (req, res) => {
 			"headline",
 			"about",
 			"location",
+			"college",
+			"city",
 			"currentCompany",
 			"profilePicture",
 			"bannerImg",
@@ -306,7 +336,11 @@ export const updateProfile = async (req, res) => {
 
 		for (const field of allowedFields) {
 			if (Object.prototype.hasOwnProperty.call(req.body, field)) {
-				updatedData[field] = req.body[field];
+				if (field === "college" || field === "city") {
+					updatedData[field] = normalizeTargetProfileString(req.body[field]);
+				} else {
+					updatedData[field] = req.body[field];
+				}
 			}
 		}
 

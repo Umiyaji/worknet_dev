@@ -27,8 +27,10 @@ const allowedMimeTypes = new Set([
 	"image/webp",
 ]);
 
+const allowedResumeExtensions = /\.(pdf|doc|docx|jpe?g|png|webp)$/i;
+
 const fileFilter = (_req, file, cb) => {
-	if (allowedMimeTypes.has(file.mimetype)) {
+	if (allowedMimeTypes.has(file.mimetype) || allowedResumeExtensions.test(file.originalname || "")) {
 		cb(null, true);
 		return;
 	}

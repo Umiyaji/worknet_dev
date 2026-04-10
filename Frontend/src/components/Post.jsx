@@ -55,6 +55,7 @@ const Post = ({ post }) => {
 
 	// guard authUser and post.author
 	const isOwner = authUser?._id && post?.author?._id && authUser._id === post.author._id;
+	const canViewExactTargeting = authUser?.role === "recruiter" || isOwner;
 	const isLiked = Array.isArray(post?.likes) && authUser?._id ? post.likes.includes(authUser._id) : false;
 
 	const commentSectionRef = useRef(null);
@@ -351,6 +352,11 @@ const Post = ({ post }) => {
 										<Briefcase size={14} className='mr-1.5' />
 										Job Opening
 									</div>
+									{post.jobDetails.visibilityType === "targeted" ? (
+										<div className='mb-2 ml-2 inline-flex items-center rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold tracking-wide text-white'>
+											Targeted Hiring
+										</div>
+									) : null}
 									<h4 className='text-lg font-semibold text-slate-900'>{post.jobDetails.role}</h4>
 									<p className='text-sm text-slate-600'>{post.jobDetails.companyName}</p>
 								</div>
@@ -397,6 +403,30 @@ const Post = ({ post }) => {
 									</div>
 								</div>
 							)}
+
+							{post.jobDetails.visibilityType === "targeted" ? (
+								<div className='mt-3 rounded-xl bg-indigo-50 p-3 text-xs text-indigo-700 ring-1 ring-indigo-100'>
+									<p className='font-semibold'>Targeted Hiring</p>
+									{canViewExactTargeting ? (
+										<div className='mt-2 flex flex-wrap gap-2'>
+											{(post.jobDetails.targetColleges || []).map((college) => (
+												<span key={`post-college-${college}`} className='rounded-full bg-white px-2 py-1'>
+													College: {college}
+												</span>
+											))}
+											{(post.jobDetails.targetCities || []).map((city) => (
+												<span key={`post-city-${city}`} className='rounded-full bg-white px-2 py-1'>
+													City: {city}
+												</span>
+											))}
+										</div>
+									) : (
+										<p className='mt-2 text-xs leading-5'>
+											This opening is part of a targeted hiring campaign.
+										</p>
+									)}
+								</div>
+							) : null}
 						</div>
 					)}
 

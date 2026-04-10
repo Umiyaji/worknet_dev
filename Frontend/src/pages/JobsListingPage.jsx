@@ -84,6 +84,16 @@ const JobsListingPage = () => {
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-lg font-semibold text-slate-900">{job.title}</h3>
+                        {job.visibilityType === "targeted" ? (
+                          <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                            Targeted Hiring
+                          </span>
+                        ) : null}
+                        {job.recommendedForYou ? (
+                          <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-medium text-cyan-700">
+                            Recommended for you
+                          </span>
+                        ) : null}
                         {job.hasApplied ? (
                           <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
                             Applied

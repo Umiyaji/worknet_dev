@@ -1,5 +1,10 @@
 import mongoose from "mongoose";
 
+const normalizeProfileTarget = (value) => {
+	if (typeof value !== "string") return "";
+	return value.trim().toLowerCase();
+};
+
 const userSchema = new mongoose.Schema(
 	{
 		name: {
@@ -29,6 +34,18 @@ const userSchema = new mongoose.Schema(
 		location: {
 			type: String,
 			default: "India",
+		},
+		college: {
+			type: String,
+			default: "",
+			set: normalizeProfileTarget,
+			trim: true,
+		},
+		city: {
+			type: String,
+			default: "",
+			set: normalizeProfileTarget,
+			trim: true,
 		},
 		currentCompany: {
 			type: String,
@@ -112,6 +129,9 @@ const userSchema = new mongoose.Schema(
 	},
 	{ timestamps: true }
 );
+
+userSchema.index({ college: 1 });
+userSchema.index({ city: 1 });
 
 const User = mongoose.model("User", userSchema);
 

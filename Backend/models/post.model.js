@@ -13,6 +13,13 @@ const jobDetailsSchema = new mongoose.Schema(
 		officeLocation: { type: String, trim: true },
 		skillsRequired: [{ type: String, trim: true }],
 		lastDateToApply: { type: Date },
+		visibilityType: {
+			type: String,
+			enum: ["public", "targeted"],
+			default: "public",
+		},
+		targetColleges: [{ type: String, trim: true }],
+		targetCities: [{ type: String, trim: true }],
 		source: { type: String, trim: true },
 		sourceRowId: { type: String, trim: true },
 	},
@@ -29,6 +36,8 @@ const postSchema = new mongoose.Schema(
 		},
 		content: { type: String },
 		image: { type: String },
+		publishAt: { type: Date, required: true, default: Date.now },
+		relatedJob: { type: mongoose.Schema.Types.ObjectId, ref: "Job", default: null, index: true },
 		jobDetails: { type: jobDetailsSchema, default: null },
 		likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
 		comments: [
@@ -41,6 +50,8 @@ const postSchema = new mongoose.Schema(
 	},
 	{ timestamps: true }
 );
+
+postSchema.index({ postType: 1, publishAt: -1, createdAt: -1 });
 
 const Post = mongoose.model("Post", postSchema);
 

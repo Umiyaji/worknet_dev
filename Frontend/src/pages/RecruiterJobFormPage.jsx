@@ -5,6 +5,79 @@ import toast from "react-hot-toast";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+const normalizeTagValues = (values) =>
+  Array.from(
+    new Set(
+      (values || [])
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  );
+
+const TagsInput = ({ label, placeholder, values, onChange }) => {
+  const [draftValue, setDraftValue] = useState("");
+
+  const addTag = (value) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (!normalized) return;
+    if (values.includes(normalized)) return;
+    onChange([...values, normalized]);
+  };
+
+  const removeTag = (tag) => {
+    onChange(values.filter((value) => value !== tag));
+  };
+
+  const handleKeyDown = (event) => {
+    if (event.key === "Enter" || event.key === ",") {
+      event.preventDefault();
+      addTag(draftValue);
+      setDraftValue("");
+      return;
+    }
+
+    if (event.key === "Backspace" && !draftValue && values.length) {
+      onChange(values.slice(0, -1));
+    }
+  };
+
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
+      <div className="rounded-md border border-slate-300 px-2 py-2">
+        <div className="mb-2 flex flex-wrap gap-2">
+          {values.map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700"
+            >
+              {tag}
+              <button
+                type="button"
+                onClick={() => removeTag(tag)}
+                className="text-slate-500 hover:text-slate-700"
+              >
+                x
+              </button>
+            </span>
+          ))}
+        </div>
+        <input
+          value={draftValue}
+          onChange={(e) => setDraftValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={() => {
+            addTag(draftValue);
+            setDraftValue("");
+          }}
+          placeholder={placeholder}
+          className="w-full border-0 p-0 text-sm outline-none"
+        />
+      </div>
+    </div>
+  );
+};
+
 const initialFormState = {
   companyName: "",
   title: "",
@@ -14,6 +87,11 @@ const initialFormState = {
   location: "",
   jobType: "hybrid",
   salaryRange: "",
+  visibilityType: "public",
+  targetColleges: [],
+  targetCities: [],
+  publishMode: "now",
+  publishAt: "",
   lastDateToApply: "",
 };
 
@@ -45,6 +123,16 @@ const RecruiterJobFormPage = () => {
         location: existingJob.location || "",
         jobType: existingJob.jobType || "hybrid",
         salaryRange: existingJob.salaryRange || "",
+        visibilityType: existingJob.visibilityType || "public",
+        targetColleges: normalizeTagValues(existingJob.targetColleges || []),
+        targetCities: normalizeTagValues(existingJob.targetCities || []),
+        publishMode:
+          existingJob.publishAt && new Date(existingJob.publishAt).getTime() > Date.now()
+            ? "schedule"
+            : "now",
+        publishAt: existingJob.publishAt
+          ? new Date(existingJob.publishAt).toISOString().slice(0, 16)
+          : "",
         lastDateToApply: existingJob.lastDateToApply ? new Date(existingJob.lastDateToApply).toISOString().slice(0, 10) : "",
       });
     }
@@ -59,6 +147,13 @@ const RecruiterJobFormPage = () => {
   const payload = useMemo(
     () => ({
       ...formData,
+      publishAt:
+        formData.publishMode === "schedule" && formData.publishAt
+          ? new Date(formData.publishAt).toISOString()
+          : new Date().toISOString(),
+      visibilityType: formData.visibilityType,
+      targetColleges: normalizeTagValues(formData.targetColleges),
+      targetCities: normalizeTagValues(formData.targetCities),
       skillsRequired: formData.skillsRequired
         .split(",")
         .map((skill) => skill.trim())
@@ -95,6 +190,14 @@ const RecruiterJobFormPage = () => {
       <form
         onSubmit={(event) => {
           event.preventDefault();
+          if (
+            formData.visibilityType === "targeted" &&
+            !formData.targetColleges.length &&
+            !formData.targetCities.length
+          ) {
+            toast.error("Add at least one target college or city for targeted hiring");
+            return;
+          }
           saveJob();
         }}
         className="rounded-2xl bg-white border border-slate-200 p-5 space-y-4"
@@ -161,6 +264,71 @@ const RecruiterJobFormPage = () => {
             placeholder="Salary range (optional)"
             className="rounded-md border border-slate-300 px-3 py-2"
           />
+          <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <label className="mb-1 block text-sm font-medium text-slate-700">Visibility</label>
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="radio"
+                  checked={formData.visibilityType === "public"}
+                  onChange={() =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      visibilityType: "public",
+                      targetColleges: [],
+                      targetCities: [],
+                    }))
+                  }
+                />
+                Public
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="radio"
+                  checked={formData.visibilityType === "targeted"}
+                  onChange={() => setFormData((prev) => ({ ...prev, visibilityType: "targeted" }))}
+                />
+                Targeted
+              </label>
+            </div>
+
+            {formData.visibilityType === "targeted" ? (
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <TagsInput
+                  label="Target Colleges"
+                  placeholder="Type college and press Enter"
+                  values={formData.targetColleges}
+                  onChange={(next) => setFormData((prev) => ({ ...prev, targetColleges: normalizeTagValues(next) }))}
+                />
+                <TagsInput
+                  label="Target Cities"
+                  placeholder="Type city and press Enter"
+                  values={formData.targetCities}
+                  onChange={(next) => setFormData((prev) => ({ ...prev, targetCities: normalizeTagValues(next) }))}
+                />
+                <p className="md:col-span-2 text-xs text-slate-500">
+                  Targeted jobs are shown only to users matching selected college or city.
+                </p>
+              </div>
+            ) : null}
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Publish timing</label>
+            <select
+              value={formData.publishMode}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  publishMode: e.target.value,
+                  publishAt: e.target.value === "now" ? "" : prev.publishAt,
+                }))
+              }
+              className="w-full rounded-md border border-slate-300 px-3 py-2 bg-white"
+            >
+              <option value="now">Publish now</option>
+              <option value="schedule">Schedule for later</option>
+            </select>
+          </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Last date to apply</label>
             <input
@@ -171,6 +339,18 @@ const RecruiterJobFormPage = () => {
               className="w-full rounded-md border border-slate-300 px-3 py-2"
             />
           </div>
+          {formData.publishMode === "schedule" ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Scheduled publish time</label>
+              <input
+                required={formData.publishMode === "schedule"}
+                type="datetime-local"
+                value={formData.publishAt}
+                onChange={(e) => setFormData((prev) => ({ ...prev, publishAt: e.target.value }))}
+                className="w-full rounded-md border border-slate-300 px-3 py-2"
+              />
+            </div>
+          ) : null}
         </div>
 
         <button

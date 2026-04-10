@@ -407,6 +407,8 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
   const displayHeadline = editedData.headline ?? userData.headline;
   const displayCompany = editedData.currentCompany ?? userData.currentCompany;
   const displayLocation = editedData.location ?? userData.location;
+  const displayCollege = editedData.college ?? userData.college;
+  const displayCity = editedData.city ?? userData.city;
   const displayResume = editedData.resume ?? userData.resume;
   const resolvedResumeUrl = resolveResumeUrl(displayResume);
   const hasResume = Boolean(displayResume);
@@ -546,6 +548,28 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
                 field="location"
                 icon={MapPin}
                 onSave={(value) => handleFieldSave("location", value)}
+                showLabel
+                valueClassName="font-medium text-gray-900"
+              />
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <EditableField
+                label="College"
+                value={displayCollege}
+                field="college"
+                onSave={(value) => handleFieldSave("college", value)}
+                showLabel
+                valueClassName="font-medium text-gray-900"
+              />
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <EditableField
+                label="City"
+                value={displayCity}
+                field="city"
+                onSave={(value) => handleFieldSave("city", value)}
                 showLabel
                 valueClassName="font-medium text-gray-900"
               />

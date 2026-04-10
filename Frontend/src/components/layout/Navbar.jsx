@@ -51,7 +51,10 @@ const Navbar = () => {
 
   const { data: conversations } = useQuery({
     queryKey: ["conversations"],
-    queryFn: async () => axiosInstance.get("/messages/conversations"),
+    queryFn: async () => {
+      const res = await axiosInstance.get("/messages/conversations");
+      return res.data;
+    },
     enabled: !!authUser,
   });
 
@@ -160,7 +163,7 @@ const Navbar = () => {
   ).length;
   const unreadConnectionRequestsCount = connectionRequests?.data?.length;
   const unreadMessagesCount =
-    conversations?.data?.reduce(
+    conversations?.reduce(
       (total, conversation) => total + (conversation.unreadCount || 0),
       0,
     ) || 0;

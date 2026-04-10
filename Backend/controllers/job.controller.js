@@ -5,11 +5,14 @@ import Job from "../models/job.model.js";
 import Application from "../models/application.model.js";
 import Notification from "../models/notification.model.js";
 import Message from "../models/message.model.js";
+import User from "../models/user.model.js";
 import { emitToUser } from "../lib/socket.js";
+import { deleteJobPost, syncJobPost } from "../lib/jobPostSync.js";
 
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 const excelPreviewStore = new Map();
 const PREVIEW_TTL_MS = 15 * 60 * 1000;
+const AI_DRAFT_TIMEOUT_MS = 12000;
 
 const cleanString = (value) => (typeof value === "string" ? value.trim() : "");
 
@@ -28,6 +31,31 @@ const normalizeSkills = (skills) => {
 	return [];
 };
 
+const normalizeTargetValues = (values) => {
+	if (Array.isArray(values)) {
+		return Array.from(
+			new Set(
+				values
+					.map((value) => cleanString(value).toLowerCase())
+					.filter(Boolean)
+			)
+		);
+	}
+
+	if (typeof values === "string") {
+		return Array.from(
+			new Set(
+				values
+					.split(/[,\n|]/)
+					.map((value) => cleanString(value).toLowerCase())
+					.filter(Boolean)
+			)
+		);
+	}
+
+	return [];
+};
+
 const normalizeJobType = (jobType) => {
 	const value = cleanString(jobType).toLowerCase();
 	if (value === "remote" || value === "on-site" || value === "hybrid") {
@@ -37,6 +65,11 @@ const normalizeJobType = (jobType) => {
 		return "on-site";
 	}
 	return "hybrid";
+};
+
+const normalizeVisibilityType = (value) => {
+	const normalized = cleanString(value).toLowerCase();
+	return normalized === "targeted" ? "targeted" : "public";
 };
 
 const parseLastDateToApply = (value) => {
@@ -52,7 +85,60 @@ const parseLastDateToApply = (value) => {
 		// Excel serial date format fallback
 		const excelDate = XLSX.SSF.parse_date_code(value);
 		if (excelDate?.y && excelDate?.m && excelDate?.d) {
-			const date = new Date(Date.UTC(excelDate.y, excelDate.m - 1, excelDate.d));
+			const hasTimeComponent = Boolean(excelDate.H || excelDate.M || excelDate.S || excelDate.u);
+			const date = new Date(
+				Date.UTC(
+					excelDate.y,
+					excelDate.m - 1,
+					excelDate.d,
+					hasTimeComponent ? excelDate.H || 0 : 23,
+					hasTimeComponent ? excelDate.M || 0 : 59,
+					hasTimeComponent ? excelDate.S || 0 : 59,
+					hasTimeComponent ? Math.round((excelDate.u || 0) * 1000) : 999
+				)
+			);
+			return Number.isNaN(date.getTime()) ? null : date;
+		}
+	}
+
+	const parsed = new Date(value);
+	if (Number.isNaN(parsed.getTime())) {
+		return null;
+	}
+
+	// Date-only inputs should remain valid for the full day.
+	if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+		parsed.setHours(23, 59, 59, 999);
+	}
+
+	return parsed;
+};
+
+const parsePublishAt = (value) => {
+	if (!value) {
+		return new Date();
+	}
+
+	if (value instanceof Date && !Number.isNaN(value.getTime())) {
+		return value;
+	}
+
+	if (typeof value === "number") {
+		// Excel serial date-time format fallback
+		const excelDate = XLSX.SSF.parse_date_code(value);
+		if (excelDate?.y && excelDate?.m && excelDate?.d) {
+			const milliseconds = Math.round((excelDate.u || 0) * 1000);
+			const date = new Date(
+				Date.UTC(
+					excelDate.y,
+					excelDate.m - 1,
+					excelDate.d,
+					excelDate.H || 0,
+					excelDate.M || 0,
+					excelDate.S || 0,
+					milliseconds
+				)
+			);
 			return Number.isNaN(date.getTime()) ? null : date;
 		}
 	}
@@ -110,6 +196,10 @@ const normalizeJobPayload = (payload, fallback = {}) => {
 		location: cleanString(payload.location || fallback.location),
 		jobType: normalizeJobType(payload.jobType || fallback.jobType),
 		salaryRange: cleanString(payload.salaryRange || fallback.salaryRange),
+		visibilityType: normalizeVisibilityType(payload.visibilityType || fallback.visibilityType),
+		targetColleges: normalizeTargetValues(payload.targetColleges || fallback.targetColleges),
+		targetCities: normalizeTargetValues(payload.targetCities || fallback.targetCities),
+		publishAt: parsePublishAt(payload.publishAt || fallback.publishAt),
 		lastDateToApply: parseLastDateToApply(payload.lastDateToApply || fallback.lastDateToApply),
 	};
 
@@ -122,8 +212,15 @@ const validateJobPayload = (payload) => {
 	if (!payload.description) return "description is required";
 	if (!payload.experienceRequired) return "experienceRequired is required";
 	if (!payload.location) return "location is required";
+	if (!payload.publishAt) return "publishAt must be a valid date";
 	if (!payload.lastDateToApply) return "lastDateToApply is required and must be a valid date";
 	if (!payload.skillsRequired.length) return "skillsRequired must include at least one skill";
+	if (payload.visibilityType === "targeted" && !payload.targetColleges.length && !payload.targetCities.length) {
+		return "Targeted jobs must include at least one college or city";
+	}
+	if (payload.publishAt.getTime() > payload.lastDateToApply.getTime()) {
+		return "publishAt cannot be later than lastDateToApply";
+	}
 	return "";
 };
 
@@ -162,8 +259,138 @@ const extractJson = (text) => {
 	}
 };
 
+const formatDisplayDate = (value) => {
+	const parsed = value instanceof Date ? value : new Date(value);
+	if (Number.isNaN(parsed.getTime())) {
+		return "";
+	}
+
+	return parsed.toLocaleDateString("en-IN", {
+		day: "numeric",
+		month: "long",
+		year: "numeric",
+	});
+};
+
+const normalizeDescriptionLine = (value) => cleanString(value).replace(/\s+/g, " ");
+
+const stripMarkdownFormatting = (value) =>
+	cleanString(value)
+		.replace(/\*\*(.*?)\*\*/g, "$1")
+		.replace(/\*(.*?)\*/g, "$1")
+		.replace(/^[\t ]*[-*•]\s+/gm, "")
+		.replace(/^[\t ]*\d+\.\s+/gm, "")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+
+const buildStructuredJobDescription = (draft) => {
+	const title = cleanString(draft.title);
+	const companyName = cleanString(draft.companyName);
+	const location = cleanString(draft.location);
+	const experienceRequired = cleanString(draft.experienceRequired);
+	const salaryRange = cleanString(draft.salaryRange);
+	const skills = normalizeSkills(draft.skillsRequired);
+	const deadline = formatDisplayDate(draft.lastDateToApply);
+	const jobType =
+		draft.jobType === "remote" ? "Remote" : draft.jobType === "on-site" ? "On-site" : "Hybrid";
+
+	const overviewParts = [];
+	if (companyName) {
+		overviewParts.push(`${companyName} is hiring for the ${title} role`);
+	} else {
+		overviewParts.push(`We are hiring for the ${title} role`);
+	}
+	if (location) {
+		overviewParts.push(`based in ${location}`);
+	}
+	if (draft.jobType) {
+		overviewParts.push(`in a ${jobType.toLowerCase()} setup`);
+	}
+	overviewParts.push(
+		"with an emphasis on practical execution, clear communication, and dependable teamwork."
+	);
+
+	const lines = [
+		`${title} at ${companyName || "the company"}`,
+		"",
+		"Overview",
+		normalizeDescriptionLine(`${overviewParts.join(" ")}.`),
+	];
+
+	if (experienceRequired || salaryRange || location || draft.jobType) {
+		lines.push("", "Role Snapshot");
+		if (location) lines.push(`Location: ${location}`);
+		if (draft.jobType) lines.push(`Work mode: ${jobType}`);
+		if (experienceRequired) lines.push(`Experience required: ${experienceRequired}`);
+		if (salaryRange) lines.push(`Salary range: ${salaryRange}`);
+	}
+
+	if (skills.length) {
+		lines.push("", "What We're Looking For");
+		lines.push(`Skills required: ${skills.join(", ")}`);
+	}
+
+	lines.push("", "Why Apply");
+	lines.push(
+		normalizeDescriptionLine(
+			`This role is a strong fit for candidates who want to build real-world experience, contribute to meaningful work from day one, and grow in a professional team environment.`
+		)
+	);
+
+	if (deadline) {
+		lines.push("", `Application deadline: ${deadline}`);
+	}
+
+	return lines.join("\n").trim();
+};
+
+const isWeakGeneratedDescription = (description, draft) => {
+	const normalized = cleanString(description).toLowerCase();
+	if (!normalized) {
+		return true;
+	}
+
+	const title = cleanString(draft.title).toLowerCase();
+	const companyName = cleanString(draft.companyName).toLowerCase();
+
+	const weakPhrases = [
+		"this is an exciting opportunity",
+		"looking to grow",
+		"motivated",
+		"join our team",
+		"apply now",
+		"strong communication skills",
+	];
+
+	const genericPhraseCount = weakPhrases.filter((phrase) => normalized.includes(phrase)).length;
+	const lineCount = normalized.split(/\n+/).filter(Boolean).length;
+	const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+
+	return (
+		wordCount < 70 ||
+		lineCount < 6 ||
+		genericPhraseCount >= 2 ||
+		(title && !normalized.includes(title)) ||
+		(companyName && !normalized.includes(companyName))
+	);
+};
+
+const finalizeDraftDescription = (draft, fallbackDraft = {}) => {
+	const mergedDraft = {
+		...fallbackDraft,
+		...draft,
+	};
+	const generatedDescription = stripMarkdownFormatting(mergedDraft.description);
+
+	if (!generatedDescription || isWeakGeneratedDescription(generatedDescription, mergedDraft)) {
+		return buildStructuredJobDescription(mergedDraft);
+	}
+
+	return generatedDescription;
+};
+
 const getJobDraftPrompt = (row) => `
-Convert this hiring row into a professional job post JSON.
+Convert this hiring row into a polished job draft JSON for a hiring portal.
 Return strict JSON only with this exact structure:
 {
   "companyName": "",
@@ -174,9 +401,23 @@ Return strict JSON only with this exact structure:
   "location": "",
   "jobType": "remote|on-site|hybrid",
   "salaryRange": "",
+  "publishAt": "YYYY-MM-DD or ISO datetime string",
   "lastDateToApply": "YYYY-MM-DD"
 }
-Do not invent unrealistic details. Keep concise and recruiter-friendly.
+Rules for "description":
+- Write plain text only, not markdown.
+- Make it useful and specific, not generic filler.
+- Use short sections separated by blank lines.
+- Include these sections when supported by the row data: Overview, Role Snapshot, What We're Looking For, Application Deadline.
+- Mention the role title, company name, location, work mode, experience, salary range, and core skills when available.
+- Do not use hype phrases like "exciting opportunity", "motivated candidate", or "looking to grow".
+- Do not add benefits, perks, responsibilities, technologies, or qualifications that are not present in the source row.
+- If the source row is sparse, still write a clean, professional description using only the provided facts.
+Rules for all fields:
+- Preserve factual values from the source row.
+- Normalize jobType to exactly one of: remote, on-site, hybrid.
+- Return at least 4 concrete items in skillsRequired when enough skills exist in the source; otherwise return only the provided skills.
+- Output valid JSON only with no code fences or commentary.
 Source row: ${JSON.stringify(row)}
 `.trim();
 
@@ -186,19 +427,28 @@ const aiGenerateJobDraft = async (row) => {
 	}
 
 	const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-	const response = await fetch(
-		`${GEMINI_API_URL}/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-		{
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				contents: [{ parts: [{ text: getJobDraftPrompt(row) }] }],
-				generationConfig: { responseMimeType: "application/json" },
-			}),
-		}
-	);
+	const controller = new AbortController();
+	const timeoutId = setTimeout(() => controller.abort(), AI_DRAFT_TIMEOUT_MS);
+
+	let response;
+	try {
+		response = await fetch(
+			`${GEMINI_API_URL}/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					contents: [{ parts: [{ text: getJobDraftPrompt(row) }] }],
+					generationConfig: { responseMimeType: "application/json" },
+				}),
+				signal: controller.signal,
+			}
+		);
+	} finally {
+		clearTimeout(timeoutId);
+	}
 
 	const data = await response.json();
 	if (!response.ok) {
@@ -226,8 +476,44 @@ const rowToFallbackDraft = (row) => ({
 	location: rowValue(row, ["location", "jobLocation", "Location"]),
 	jobType: rowValue(row, ["jobType", "type", "workMode", "Job Type"]),
 	salaryRange: rowValue(row, ["salaryRange", "salary", "Salary"]),
+	visibilityType: rowValue(row, ["visibilityType", "visibility", "Visibility Type", "Visibility"]),
+	targetColleges: rowValue(row, ["targetColleges", "colleges", "Target Colleges"]),
+	targetCities: rowValue(row, ["targetCities", "cities", "Target Cities"]),
+	publishAt: rowValue(row, [
+		"publishAt",
+		"publishOn",
+		"scheduleAt",
+		"scheduleTime",
+		"schedule_time",
+		"schedule time",
+		"sechduleTime",
+		"sechdule time",
+		"Schedule At",
+		"Schedule Time",
+		"Publish At",
+		"Publish On",
+	]),
 	lastDateToApply: rowValue(row, ["lastDateToApply", "lastDate", "deadline", "Last Date To Apply"]),
 });
+
+const applyExcelControlledFields = (draft, fallbackDraft) => {
+	const merged = { ...draft };
+
+	// Preserve upload sheet scheduling when provided, instead of AI guessing it.
+	if (fallbackDraft?.publishAt !== undefined && fallbackDraft?.publishAt !== null && fallbackDraft?.publishAt !== "") {
+		merged.publishAt = fallbackDraft.publishAt;
+	}
+
+	if (
+		fallbackDraft?.lastDateToApply !== undefined &&
+		fallbackDraft?.lastDateToApply !== null &&
+		fallbackDraft?.lastDateToApply !== ""
+	) {
+		merged.lastDateToApply = fallbackDraft.lastDateToApply;
+	}
+
+	return merged;
+};
 
 const cleanupPreviewStore = () => {
 	const now = Date.now();
@@ -237,6 +523,109 @@ const cleanupPreviewStore = () => {
 		}
 	}
 };
+
+const getUserTargetContext = (user) => ({
+	college: cleanString(user?.college).toLowerCase(),
+	city: cleanString(user?.city).toLowerCase(),
+});
+
+const sanitizeJobForViewer = (job, viewer, { isOwner = false } = {}) => {
+	if (!job) {
+		return job;
+	}
+
+	if (isOwner || viewer?.role === "recruiter") {
+		return job;
+	}
+
+	const sanitizedJob = { ...job };
+	delete sanitizedJob.targetColleges;
+	delete sanitizedJob.targetCities;
+	return sanitizedJob;
+};
+
+const buildTargetedVisibilityFilter = (user) => {
+	const targetContext = getUserTargetContext(user);
+	const targetedSubFilters = [];
+
+	if (targetContext.college) {
+		targetedSubFilters.push({ targetColleges: { $in: [targetContext.college] } });
+	}
+	if (targetContext.city) {
+		targetedSubFilters.push({ targetCities: { $in: [targetContext.city] } });
+	}
+
+	if (!targetedSubFilters.length) {
+		return { visibilityType: "public" };
+	}
+
+	return {
+		$or: [
+			{ visibilityType: "public" },
+			{
+				visibilityType: "targeted",
+				$or: targetedSubFilters,
+			},
+		],
+	};
+};
+
+const createTargetedJobNotifications = async (job, recruiter) => {
+	if (job.visibilityType !== "targeted") {
+		return;
+	}
+
+	const targetingRules = [];
+	if (job.targetColleges?.length) {
+		targetingRules.push({ college: { $in: job.targetColleges } });
+	}
+	if (job.targetCities?.length) {
+		targetingRules.push({ city: { $in: job.targetCities } });
+	}
+
+	if (!targetingRules.length) {
+		return;
+	}
+
+	const matchingUsers = await User.find({
+		role: "user",
+		_id: { $ne: recruiter._id },
+		$or: targetingRules,
+	}).select("_id");
+
+	if (!matchingUsers.length) {
+		return;
+	}
+
+	const notifications = matchingUsers.map((user) => ({
+		recipient: user._id,
+		type: "targetedJob",
+		relatedUser: recruiter._id,
+		relatedJob: job._id,
+		metadata: {
+			jobTitle: job.title,
+			companyName: job.companyName,
+		},
+	}));
+
+	const createdNotifications = await Notification.insertMany(notifications);
+	for (const notification of createdNotifications) {
+		emitToUser(notification.recipient, "notification:new", notification);
+	}
+};
+
+const buildPublishDedupKey = (draft, recruiterId) =>
+	[
+		recruiterId.toString(),
+		cleanString(draft.companyName).toLowerCase(),
+		cleanString(draft.title).toLowerCase(),
+		cleanString(draft.location).toLowerCase(),
+		cleanString(draft.jobType).toLowerCase(),
+		cleanString(draft.visibilityType || "public").toLowerCase(),
+		normalizeTargetValues(draft.targetColleges).sort().join("|"),
+		normalizeTargetValues(draft.targetCities).sort().join("|"),
+		draft.lastDateToApply instanceof Date ? draft.lastDateToApply.toISOString() : "",
+	].join("::");
 
 export const createJob = async (req, res) => {
 	try {
@@ -251,6 +640,8 @@ export const createJob = async (req, res) => {
 			...payload,
 			companyId: req.user._id,
 		});
+		await syncJobPost(job);
+		await createTargetedJobNotifications(job, req.user);
 
 		const populatedJob = await Job.findById(job._id).populate(
 			"companyId",
@@ -293,6 +684,7 @@ export const updateJob = async (req, res) => {
 			"companyId",
 			"name username companyName companyLogo industry companyLocation"
 		);
+		await syncJobPost(updatedJob);
 
 		return res.json(updatedJob);
 	} catch (error) {
@@ -319,6 +711,7 @@ export const deleteJob = async (req, res) => {
 
 		await Job.findByIdAndDelete(jobId);
 		await Application.deleteMany({ jobId });
+		await deleteJobPost(jobId);
 		return res.json({ message: "Job deleted successfully" });
 	} catch (error) {
 		console.error("Error in deleteJob controller:", error);
@@ -369,6 +762,8 @@ export const getRecruiterJobs = async (req, res) => {
 
 		return res.json(
 			jobs.map((job) => {
+				const publishAt = new Date(job.publishAt).getTime();
+				const isPublished = publishAt <= Date.now();
 				const stats = statsByJob[job._id.toString()] || {
 					totalApplicants: 0,
 					statusBreakdown: APPLICATION_STATUSES.reduce((acc, status) => {
@@ -381,6 +776,8 @@ export const getRecruiterJobs = async (req, res) => {
 					...job.toObject(),
 					totalApplicants: stats.totalApplicants,
 					statusBreakdown: stats.statusBreakdown,
+					isScheduled: !isPublished,
+					isPublished,
 					isExpired: new Date(job.lastDateToApply).getTime() < Date.now(),
 				};
 			})
@@ -394,23 +791,35 @@ export const getRecruiterJobs = async (req, res) => {
 export const getAllJobs = async (req, res) => {
 	try {
 		const { search = "", location = "", jobType = "" } = req.query;
-		const filter = {};
+		const baseFilter = {
+			isActive: true,
+			publishAt: { $lte: new Date() },
+		};
+		const andFilters = [];
+
+		if (req.user?.role !== "recruiter") {
+			andFilters.push(buildTargetedVisibilityFilter(req.user));
+		}
 
 		if (search) {
-			filter.$or = [
-				{ title: { $regex: search, $options: "i" } },
-				{ description: { $regex: search, $options: "i" } },
-				{ skillsRequired: { $regex: search, $options: "i" } },
-			];
+			andFilters.push({
+				$or: [
+					{ title: { $regex: search, $options: "i" } },
+					{ description: { $regex: search, $options: "i" } },
+					{ skillsRequired: { $regex: search, $options: "i" } },
+				],
+			});
 		}
 
 		if (location) {
-			filter.location = { $regex: location, $options: "i" };
+			andFilters.push({ location: { $regex: location, $options: "i" } });
 		}
 
 		if (jobType && ["remote", "on-site", "hybrid"].includes(jobType)) {
-			filter.jobType = jobType;
+			andFilters.push({ jobType });
 		}
+
+		const filter = andFilters.length ? { ...baseFilter, $and: andFilters } : baseFilter;
 
 		const jobs = await Job.find(filter)
 			.populate("companyId", "name username companyName companyLogo industry companyLocation")
@@ -424,8 +833,12 @@ export const getAllJobs = async (req, res) => {
 
 		return res.json(
 			jobs.map((job) => ({
-				...job.toObject(),
+				...sanitizeJobForViewer(job.toObject(), req.user),
 				hasApplied: appliedJobIds.has(job._id.toString()),
+				recommendedForYou:
+					job.visibilityType === "targeted" &&
+					(Boolean(cleanString(req.user?.college)) || Boolean(cleanString(req.user?.city))),
+				isScheduled: new Date(job.publishAt).getTime() > Date.now(),
 				isExpired: new Date(job.lastDateToApply).getTime() < Date.now(),
 			}))
 		);
@@ -450,6 +863,20 @@ export const getJobById = async (req, res) => {
 			return res.status(404).json({ message: "Job not found" });
 		}
 
+		const isOwner = job.companyId?._id?.toString() === req.user?._id?.toString();
+		if (new Date(job.publishAt).getTime() > Date.now() && !isOwner) {
+			return res.status(404).json({ message: "Job not found" });
+		}
+
+		if (!isOwner && req.user?.role !== "recruiter" && job.visibilityType === "targeted") {
+			const targetContext = getUserTargetContext(req.user);
+			const matchesCollege = targetContext.college && job.targetColleges?.includes(targetContext.college);
+			const matchesCity = targetContext.city && job.targetCities?.includes(targetContext.city);
+			if (!matchesCollege && !matchesCity) {
+				return res.status(404).json({ message: "Job not found" });
+			}
+		}
+
 		const totalApplicants = await Application.countDocuments({ jobId });
 		let myApplication = null;
 
@@ -460,10 +887,11 @@ export const getJobById = async (req, res) => {
 		}
 
 		return res.json({
-			...job.toObject(),
+			...sanitizeJobForViewer(job.toObject(), req.user, { isOwner }),
 			totalApplicants,
 			hasApplied: Boolean(myApplication),
 			myApplication,
+			isScheduled: new Date(job.publishAt).getTime() > Date.now(),
 			isExpired: new Date(job.lastDateToApply).getTime() < Date.now(),
 		});
 	} catch (error) {
@@ -496,6 +924,15 @@ export const applyToJob = async (req, res) => {
 		const job = await Job.findById(jobId);
 		if (!job) {
 			return res.status(404).json({ message: "Job not found" });
+		}
+
+		if (job.visibilityType === "targeted") {
+			const targetContext = getUserTargetContext(req.user);
+			const matchesCollege = targetContext.college && job.targetColleges?.includes(targetContext.college);
+			const matchesCity = targetContext.city && job.targetCities?.includes(targetContext.city);
+			if (!matchesCollege && !matchesCity) {
+				return res.status(403).json({ message: "This job is targeted to another candidate group" });
+			}
 		}
 
 		if (job.companyId.toString() === req.user._id.toString()) {
@@ -862,7 +1299,9 @@ export const uploadExcelPreview = async (req, res) => {
 				console.error(`AI generation failed for row ${index + 1}:`, aiError.message);
 			}
 
-			const normalized = normalizeJobPayload(aiDraft || fallbackDraft, {
+			const draftCandidate = applyExcelControlledFields(aiDraft || fallbackDraft, fallbackDraft);
+			draftCandidate.description = finalizeDraftDescription(draftCandidate, fallbackDraft);
+			const normalized = normalizeJobPayload(draftCandidate, {
 				...fallbackDraft,
 				companyName: req.user.companyName || fallbackDraft.companyName,
 			});
@@ -898,6 +1337,7 @@ export const publishExcelJobs = async (req, res) => {
 		cleanupPreviewStore();
 
 		const previewToken = cleanString(req.body?.previewToken);
+		const editedDrafts = Array.isArray(req.body?.drafts) ? req.body.drafts : null;
 		if (!previewToken) {
 			return res.status(400).json({ message: "previewToken is required" });
 		}
@@ -912,24 +1352,78 @@ export const publishExcelJobs = async (req, res) => {
 			return res.status(403).json({ message: "You can publish only your own preview" });
 		}
 
-		const validDrafts = previewEntry.drafts.filter((entry) => !entry.validationError).map((entry) => entry.draft);
+		const sourceDrafts = editedDrafts
+			? editedDrafts.map((draft) => {
+					const finalizedDraft = {
+						...draft,
+						description: finalizeDraftDescription(draft),
+					};
+
+					return normalizeJobPayload(finalizedDraft, {
+						companyName: req.user.companyName || draft?.companyName,
+					});
+			  })
+			: previewEntry.drafts
+					.filter((entry) => !entry.validationError)
+					.map((entry) => entry.draft);
+
+		const invalidEditedDraft = sourceDrafts.find((draft) => validateJobPayload(draft));
+		if (invalidEditedDraft) {
+			return res.status(400).json({
+				message: `Edited draft is invalid: ${validateJobPayload(invalidEditedDraft)}`,
+			});
+		}
+
+		const validDrafts = sourceDrafts;
 		if (!validDrafts.length) {
 			return res.status(400).json({ message: "No valid jobs to publish" });
 		}
 
-		const insertedJobs = await Job.insertMany(
-			validDrafts.map((draft) => ({
+		const dedupedDrafts = [];
+		const seenKeys = new Set();
+
+		for (const draft of validDrafts) {
+			const normalizedDraft = {
 				...draft,
 				companyName: req.user.companyName || draft.companyName,
+			};
+			const draftKey = buildPublishDedupKey(normalizedDraft, req.user._id);
+			if (!seenKeys.has(draftKey)) {
+				seenKeys.add(draftKey);
+				dedupedDrafts.push(normalizedDraft);
+			}
+		}
+
+		const existingJobs = await Job.find({ companyId: req.user._id }).select(
+			"companyName title location jobType lastDateToApply"
+		);
+		const existingKeys = new Set(
+			existingJobs.map((job) => buildPublishDedupKey(job, req.user._id))
+		);
+
+		const draftsToInsert = dedupedDrafts.filter(
+			(draft) => !existingKeys.has(buildPublishDedupKey(draft, req.user._id))
+		);
+
+		if (!draftsToInsert.length) {
+			excelPreviewStore.delete(previewToken);
+			return res.status(400).json({ message: "All valid jobs in this preview already exist" });
+		}
+
+		const insertedJobs = await Job.insertMany(
+			draftsToInsert.map((draft) => ({
+				...draft,
 				companyId: req.user._id,
 			}))
 		);
+		await Promise.all(insertedJobs.map((job) => syncJobPost(job)));
 
 		excelPreviewStore.delete(previewToken);
 
 		return res.status(201).json({
 			message: "Jobs published successfully",
 			publishedCount: insertedJobs.length,
+			skippedDuplicates: dedupedDrafts.length - draftsToInsert.length,
 			jobs: insertedJobs,
 		});
 	} catch (error) {

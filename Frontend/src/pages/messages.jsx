@@ -13,6 +13,24 @@ import { connectSocket } from "../lib/socket";
 
 const fallbackAvatar = "https://i.sstatic.net/CpC9A.png";
 
+const getSafeRelativeTime = (value) => {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return formatDistanceToNow(date, { addSuffix: true });
+};
+
+const getMessageList = (payload) =>
+  Array.isArray(payload?.messages) ? payload.messages : [];
+
+const getConversationList = (payload) => (Array.isArray(payload) ? payload : []);
+
 const readFileAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -32,7 +50,7 @@ const Messages = () => {
   const fileInputRef = useRef(null);
   const activeUserIdRef = useRef(null);
 
-  const { data: conversations = [], isLoading: isConversationsLoading } =
+  const { data: conversationsData = [], isLoading: isConversationsLoading } =
     useQuery({
       queryKey: ["conversations"],
       queryFn: async () => {
@@ -40,6 +58,8 @@ const Messages = () => {
         return res.data;
       },
     });
+
+  const conversations = getConversationList(conversationsData);
 
   const filteredConversations = useMemo(() => {
     const normalized = searchTerm.trim().toLowerCase();
@@ -117,7 +137,8 @@ const Messages = () => {
           return previous;
         }
 
-        const alreadyExists = previous.messages.some(
+        const previousMessages = getMessageList(previous);
+        const alreadyExists = previousMessages.some(
           (existingMessage) => existingMessage._id === message._id,
         );
 
@@ -127,7 +148,7 @@ const Messages = () => {
 
         return {
           ...previous,
-          messages: [...previous.messages, message],
+          messages: [...previousMessages, message],
         };
       });
 
@@ -177,7 +198,7 @@ const Messages = () => {
   };
 
   const activeUser = activeConversation?.user;
-  const messages = activeConversation?.messages || [];
+  const messages = getMessageList(activeConversation);
   const isActiveUserOnline = activeUser?._id
     ? onlineUsers.includes(activeUser._id)
     : false;
@@ -219,7 +240,8 @@ const Messages = () => {
           };
         }
 
-        const alreadyExists = previous.messages.some(
+        const previousMessages = getMessageList(previous);
+        const alreadyExists = previousMessages.some(
           (existingMessage) => existingMessage._id === message._id,
         );
 
@@ -229,7 +251,7 @@ const Messages = () => {
 
         return {
           ...previous,
-          messages: [...previous.messages, message],
+          messages: [...previousMessages, message],
         };
       });
 
@@ -250,9 +272,11 @@ const Messages = () => {
           return previous;
         }
 
+        const previousMessages = getMessageList(previous);
+
         return {
           ...previous,
-          messages: previous.messages.filter(
+          messages: previousMessages.filter(
             (message) => message._id !== messageId,
           ),
         };
@@ -295,9 +319,11 @@ const Messages = () => {
           return previous;
         }
 
+        const previousMessages = getMessageList(previous);
+
         return {
           ...previous,
-          messages: previous.messages.filter(
+          messages: previousMessages.filter(
             (message) => message._id !== messageId,
           ),
         };
@@ -451,10 +477,7 @@ const Messages = () => {
                                 </div>
                               ) : null}
                               <p className="text-xs text-gray-400 mt-1 text-right">
-                                {formatDistanceToNow(
-                                  new Date(message.createdAt),
-                                  { addSuffix: true },
-                                )}
+                                {getSafeRelativeTime(message.createdAt)}
                               </p>
                               <div className="mt-1 flex justify-end">
                                 <button
@@ -502,10 +525,7 @@ const Messages = () => {
                                 </div>
                               ) : null}
                               <p className="text-xs text-gray-400 mt-1">
-                                {formatDistanceToNow(
-                                  new Date(message.createdAt),
-                                  { addSuffix: true },
-                                )}
+                                {getSafeRelativeTime(message.createdAt)}
                               </p>
                             </div>
                           </div>

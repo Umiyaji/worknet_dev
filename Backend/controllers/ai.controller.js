@@ -15,6 +15,41 @@ const supportedImageMimeTypes = new Set([
 	"image/webp",
 ]);
 
+const getNormalizedExtension = (fileName = "") => {
+	const lastDotIndex = fileName.lastIndexOf(".");
+	if (lastDotIndex === -1) {
+		return "";
+	}
+
+	return fileName.slice(lastDotIndex).toLowerCase();
+};
+
+const isSupportedTextFile = (file) => {
+	if (!file) {
+		return false;
+	}
+
+	return (
+		supportedTextMimeTypes.has(file.mimetype) ||
+		[".txt", ".csv", ".json", ".md", ".markdown"].includes(
+			getNormalizedExtension(file.originalname)
+		)
+	);
+};
+
+const isSupportedImageFile = (file) => {
+	if (!file) {
+		return false;
+	}
+
+	return (
+		supportedImageMimeTypes.has(file.mimetype) ||
+		[".png", ".jpg", ".jpeg", ".webp"].includes(
+			getNormalizedExtension(file.originalname)
+		)
+	);
+};
+
 const getPromptTemplate = (userPrompt, fileContextLabel = "") => [
 	"You are helping a user draft a social post.",
 	"Follow the user's request exactly.",
@@ -29,7 +64,7 @@ const getPromptTemplate = (userPrompt, fileContextLabel = "") => [
 	.join("\n");
 
 const extractTextFromFile = (file) => {
-	if (!supportedTextMimeTypes.has(file.mimetype)) {
+	if (!isSupportedTextFile(file)) {
 		return null;
 	}
 
@@ -43,7 +78,7 @@ const buildGeminiParts = ({ prompt, file }) => {
 		return parts;
 	}
 
-	if (supportedTextMimeTypes.has(file.mimetype)) {
+	if (isSupportedTextFile(file)) {
 		const fileText = extractTextFromFile(file);
 		if (fileText) {
 			parts.push({
@@ -53,10 +88,16 @@ const buildGeminiParts = ({ prompt, file }) => {
 		return parts;
 	}
 
-	if (supportedImageMimeTypes.has(file.mimetype)) {
+	if (isSupportedImageFile(file)) {
 		parts.push({
 			inline_data: {
-				mime_type: file.mimetype,
+				mime_type: supportedImageMimeTypes.has(file.mimetype)
+					? file.mimetype
+					: getNormalizedExtension(file.originalname) === ".png"
+						? "image/png"
+						: getNormalizedExtension(file.originalname) === ".webp"
+							? "image/webp"
+							: "image/jpeg",
 				data: file.buffer.toString("base64"),
 			},
 		});

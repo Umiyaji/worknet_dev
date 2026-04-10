@@ -20,7 +20,7 @@ import RecruiterJobsPage from "./pages/RecruiterJobsPage";
 import RecruiterJobFormPage from "./pages/RecruiterJobFormPage";
 import RecruiterApplicantsPage from "./pages/RecruiterApplicantsPage";
 import RecruiterApplicantDetailPage from "./pages/RecruiterApplicantDetailPage";
-import RecruiterExcelUploadPage from "./pages/RecruiterExcelUploadPage";
+import RecruiterAutomatedJobPostingPage from "./pages/RecruiterAutomatedJobPostingPage";
 import JobsListingPage from "./pages/JobsListingPage";
 import JobDetailPage from "./pages/JobDetailPage";
 import RecruiterProfilePage from "./pages/RecruiterProfilePage";
@@ -171,7 +171,15 @@ function App() {
           path="/recruiter/jobs/upload-excel"
           element={
             <RecruiterRoute authUser={authUser}>
-              <RecruiterExcelUploadPage />
+              <RecruiterAutomatedJobPostingPage />
+            </RecruiterRoute>
+          }
+        />
+        <Route
+          path="/recruiter/automated-jobs"
+          element={
+            <RecruiterRoute authUser={authUser}>
+              <RecruiterAutomatedJobPostingPage />
             </RecruiterRoute>
           }
         />

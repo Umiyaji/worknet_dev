@@ -14,8 +14,10 @@ const allowedMimeTypes = new Set([
 	"image/webp",
 ]);
 
+const allowedExtensions = /\.(txt|csv|json|md|markdown|png|jpe?g|webp)$/i;
+
 const fileFilter = (req, file, cb) => {
-	if (allowedMimeTypes.has(file.mimetype)) {
+	if (allowedMimeTypes.has(file.mimetype) || allowedExtensions.test(file.originalname || "")) {
 		cb(null, true);
 		return;
 	}

@@ -2,7 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { axiosInstance } from "../lib/axios";
 import { toast } from "react-hot-toast";
-import { ExternalLink, Eye, MessageSquare, ThumbsUp, Trash2, UserPlus } from "lucide-react";
+import { Briefcase, ExternalLink, Eye, MessageSquare, ThumbsUp, Trash2, UserPlus } from "lucide-react";
 import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import { formatDistanceToNow } from "date-fns";
@@ -43,6 +43,8 @@ const NotificationsPage = () => {
 				return <UserPlus className='text-purple-500 size-3 md:size-5 lg:size-5' />;
 			case "message":
 				return <MessageSquare className='text-emerald-500 size-3 md:size-5 lg:size-5' />;
+			case "targetedJob":
+				return <Briefcase className='text-indigo-500 size-3 md:size-5 lg:size-5' />;
 			default:
 				return null;
 		}
@@ -86,6 +88,15 @@ const NotificationsPage = () => {
 							{notification.relatedUser.name}
 						</Link>{" "}
 						sent you a message
+					</span>
+				);
+			case "targetedJob":
+				return (
+					<span>
+						<Link to={`/profile/${notification.relatedUser.username}`} className='font-bold'>
+							{notification.relatedUser.name}
+						</Link>{" "}
+						posted a targeted hiring opening: <strong>{notification.metadata?.jobTitle || "New opening"}</strong>
 					</span>
 				);
 			default:
@@ -167,6 +178,14 @@ const NotificationsPage = () => {
 														>
 															<MessageSquare size={14} />
 															Open chat
+														</Link>
+													) : notification.type === "targetedJob" && notification.relatedJob ? (
+														<Link
+															to={`/jobs/${notification.relatedJob._id}`}
+															className='mt-2 inline-flex items-center gap-2 rounded-md bg-gray-50 px-2 py-2 text-xs md:text-sm text-gray-600 hover:bg-gray-100 transition-colors'
+														>
+															<Briefcase size={14} />
+															View job
 														</Link>
 													) : renderRelatedPost(notification.relatedPost)}
 												</div>

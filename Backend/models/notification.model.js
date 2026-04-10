@@ -17,6 +17,7 @@ const notificationSchema = new mongoose.Schema(
 				"message",
 				"applicationSubmitted",
 				"applicationStatusUpdated",
+				"targetedJob",
 			],
 		},
 		relatedUser: {

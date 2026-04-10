@@ -1,6 +1,7 @@
 import User from "../models/user.model.js";
 import Job from "../models/job.model.js";
 import Application from "../models/application.model.js";
+import JobRow from "../models/jobRow.model.js";
 import cloudinary from "../lib/cloudinary.js";
 
 const cleanString = (value) => (typeof value === "string" ? value.trim() : "");
@@ -9,7 +10,15 @@ export const getRecruiterDashboard = async (req, res) => {
 	try {
 		const recruiterId = req.user._id;
 
-		const [totalJobsPosted, activeJobs, recentJobs, applicationsByJob, statusBreakdown, recentApplications] = await Promise.all([
+		const [
+			totalJobsPosted,
+			activeJobs,
+			recentJobs,
+			applicationsByJob,
+			statusBreakdown,
+			recentApplications,
+			jobRowStats,
+		] = await Promise.all([
 			Job.countDocuments({ companyId: recruiterId }),
 			Job.countDocuments({ companyId: recruiterId, lastDateToApply: { $gte: new Date() } }),
 			Job.find({ companyId: recruiterId }).sort({ createdAt: -1 }).limit(5),
@@ -58,6 +67,15 @@ export const getRecruiterDashboard = async (req, res) => {
 				.populate("userId", "name username profilePicture")
 				.sort({ createdAt: -1 })
 				.limit(8),
+			JobRow.aggregate([
+				{ $match: { recruiterId } },
+				{
+					$group: {
+						_id: "$status",
+						count: { $sum: 1 },
+					},
+				},
+			]),
 		]);
 
 		const filteredRecentApplications = recentApplications.filter((item) => item.jobId);
@@ -66,6 +84,14 @@ export const getRecruiterDashboard = async (req, res) => {
 			totalJobsPosted,
 			activeJobs,
 			totalApplicants: applicationsByJob[0]?.totalApplicants || 0,
+			automatedJobRows: jobRowStats.reduce(
+				(acc, item) => {
+					acc.total += item.count;
+					acc[item._id] = item.count;
+					return acc;
+				},
+				{ total: 0, draft: 0, scheduled: 0, posted: 0, error: 0 }
+			),
 			recentJobs,
 			statusBreakdown: statusBreakdown.reduce((acc, item) => {
 				acc[item._id] = item.count;

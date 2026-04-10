@@ -14,7 +14,9 @@ import connectionRoutes from "./routes/connection.route.js";
 import messageRoutes from "./routes/message.route.js";
 import jobRoutes from "./routes/job.route.js";
 import recruiterRoutes from "./routes/recruiter.route.js";
+import jobRowRoutes from "./routes/jobRow.route.js";
 import { createSocketServer } from "./lib/socket.js";
+import { startJobRowScheduler } from "./lib/jobRowScheduler.js";
 
 import { connectDB } from "./lib/db.js";
 
@@ -47,6 +49,7 @@ app.use("/api/v1/connections", connectionRoutes);
 app.use("/api/v1/messages", messageRoutes);
 app.use("/api/v1/jobs", jobRoutes);
 app.use("/api/v1/recruiter", recruiterRoutes);
+app.use("/api/v1/job-rows", jobRowRoutes);
 
 if (process.env.NODE_ENV === "production") {
 	const pathToFrontend = path.join(__dirname, "..", "worknet-frontend", "dist");
@@ -62,6 +65,7 @@ if (process.env.NODE_ENV === "production") {
 const startServer = async () => {
 	try {
 		await connectDB();
+		startJobRowScheduler();
 		server.listen(PORT, () => {
 			console.log(`Server running on port ${PORT}`);
 		});
