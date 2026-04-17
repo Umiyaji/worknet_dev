@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import LoginForm from "../../components/auth/LoginForm";
 import Footer from "../../components/layout/Footer";
-import GoogleLoginComp from "../../components/GoogleLoginComp.jsx";
+import GoogleLoginComp from "../../components/GoogleLoginComp";
 
 const LoginPage = () => {
   return (
