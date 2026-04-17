@@ -1,6 +1,7 @@
 import { formatDistanceToNow } from "date-fns";
+import SmartImage from "./SmartImage";
 
-const fallbackAvatar = "https://i.sstatic.net/CpC9A.png";
+const fallbackAvatar = "/avatar.png";
 
 const getRelativeTime = (value) => {
   if (!value) {
@@ -31,7 +32,7 @@ const Conversation = ({ conversation, isActive, onClick }) => {
       }`}
     >
       <div className="shrink-0">
-        <img
+        <SmartImage
           className="h-12 w-12 rounded-full object-cover"
           src={conversation?.user?.profilePicture || fallbackAvatar}
           alt={conversation?.user?.name || "Profile"}

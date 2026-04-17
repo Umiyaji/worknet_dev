@@ -8,8 +8,8 @@ import Message from "../models/message.model.js";
 import User from "../models/user.model.js";
 import { emitToUser } from "../lib/socket.js";
 import { deleteJobPost, syncJobPost } from "../lib/jobPostSync.js";
+import { generateGeminiContent } from "../lib/gemini.js";
 
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 const excelPreviewStore = new Map();
 const PREVIEW_TTL_MS = 15 * 60 * 1000;
 const AI_DRAFT_TIMEOUT_MS = 12000;
@@ -426,33 +426,38 @@ const aiGenerateJobDraft = async (row) => {
 		return null;
 	}
 
-	const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 	const controller = new AbortController();
 	const timeoutId = setTimeout(() => controller.abort(), AI_DRAFT_TIMEOUT_MS);
 
-	let response;
+	let data;
+	let responseModel;
 	try {
-		response = await fetch(
-			`${GEMINI_API_URL}/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-			{
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({
-					contents: [{ parts: [{ text: getJobDraftPrompt(row) }] }],
-					generationConfig: { responseMimeType: "application/json" },
-				}),
-				signal: controller.signal,
-			}
-		);
+		const result = await generateGeminiContent({
+			models: [
+				process.env.GEMINI_MODEL || "gemini-2.5-flash",
+				...(String(process.env.GEMINI_FALLBACK_MODELS || "gemini-2.0-flash")
+					.split(",")
+					.map((value) => value.trim())
+					.filter(Boolean)),
+			],
+			body: {
+				contents: [{ parts: [{ text: getJobDraftPrompt(row) }] }],
+				generationConfig: { responseMimeType: "application/json" },
+			},
+			signal: controller.signal,
+		});
+		data = result.data;
+		responseModel = result.model;
 	} finally {
 		clearTimeout(timeoutId);
 	}
 
-	const data = await response.json();
-	if (!response.ok) {
-		throw new Error(data?.error?.message || "AI generation failed");
+	if (!data) {
+		throw new Error("AI generation failed");
+	}
+
+	if (responseModel) {
+		console.log(`Gemini job draft generated with model: ${responseModel}`);
 	}
 
 	return extractJson(parseGeminiText(data));

@@ -17,6 +17,7 @@ import {
 import WorkOutlineIcon from "@mui/icons-material/WorkOutline";
 import ChatBubbleOutlineOutlinedIcon from "@mui/icons-material/ChatBubbleOutlineOutlined";
 import { connectSocket, disconnectSocket } from "../../lib/socket";
+import SmartImage from "../SmartImage";
 
 const Navbar = () => {
   const location = useLocation();
@@ -249,7 +250,7 @@ const Navbar = () => {
                           onClick={() => handleSearchResultClick(user.username)}
                         >
                           <div className="h-8 w-8 rounded-full mr-3 overflow-hidden bg-gray-200 flex items-center justify-center">
-                            <img
+                            <SmartImage
                               src={user.profilePicture || "/avatar.png"}
                               alt={`${user.name}'s avatar`}
                               className="w-full h-full object-cover"
@@ -391,7 +392,7 @@ const Navbar = () => {
                         onClick={() => setIsDropdownOpen((prev) => !prev)}
                         className="focus:outline-none text-neutral flex flex-col items-center cursor-pointer"
                       >
-                        <img
+                        <SmartImage
                           src={
                             authUser?.role === "recruiter"
                               ? authUser?.companyLogo || authUser?.profilePicture || "/avatar.png"

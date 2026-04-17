@@ -15,7 +15,23 @@ const statusClasses = {
 const toDateInputValue = (value) => {
 	if (!value) return "";
 	const parsed = new Date(value);
-	return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+	if (Number.isNaN(parsed.getTime())) return "";
+	const year = parsed.getFullYear();
+	const month = String(parsed.getMonth() + 1).padStart(2, "0");
+	const day = String(parsed.getDate()).padStart(2, "0");
+	return `${year}-${month}-${day}`;
+};
+
+const toDateTimeLocalInputValue = (value) => {
+	if (!value) return "";
+	const parsed = new Date(value);
+	if (Number.isNaN(parsed.getTime())) return "";
+	const year = parsed.getFullYear();
+	const month = String(parsed.getMonth() + 1).padStart(2, "0");
+	const day = String(parsed.getDate()).padStart(2, "0");
+	const hours = String(parsed.getHours()).padStart(2, "0");
+	const minutes = String(parsed.getMinutes()).padStart(2, "0");
+	return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
 const normalizeTagValues = (values) =>
@@ -88,6 +104,7 @@ const toFormRow = (row) => ({
 	skillsRequiredInput: Array.isArray(row.skillsRequired) ? row.skillsRequired.join(", ") : "",
 	lastDateToApplyInput: toDateInputValue(row.lastDateToApply),
 	autoPostApprovedInput: Boolean(row.autoPostApproved),
+	autoPostAtInput: toDateTimeLocalInputValue(row.autoPostAt),
 	visibilityType: row.visibilityType || "public",
 	targetCollegesInput: normalizeTagValues(row.targetColleges || []),
 	targetCitiesInput: normalizeTagValues(row.targetCities || []),
@@ -113,7 +130,7 @@ const normalizeRowForSave = (row) => ({
 	salaryRange: row.salaryRange,
 	lastDateToApply: row.lastDateToApplyInput,
 	autoPostApproved: row.autoPostApprovedInput,
-	autoPostAt: row.autoPostAt || null,
+	autoPostAt: row.autoPostAtInput ? new Date(row.autoPostAtInput).toISOString() : null,
 	status: row.status,
 });
 
@@ -145,7 +162,7 @@ const RecruiterAutomatedJobPostingPage = () => {
 
 	const [editingRows, setEditingRows] = useState([]);
 	const [selectedIds, setSelectedIds] = useState([]);
-	const [sharedAutoPostAt, setSharedAutoPostAt] = useState(() =>
+	const [bulkAutoPostAt, setBulkAutoPostAt] = useState(() =>
 		new Date(Date.now() + 5 * 60 * 1000).toISOString().slice(0, 16)
 	);
 
@@ -161,10 +178,32 @@ const RecruiterAutomatedJobPostingPage = () => {
 		setEditingRows((data || []).map(toFormRow));
 	}, [data]);
 
-	const refreshRows = () => {
+	const refreshAllData = () => {
 		queryClient.invalidateQueries({ queryKey: ["automatedJobRows"] });
 		queryClient.invalidateQueries({ queryKey: ["recruiterDashboard"] });
 		queryClient.invalidateQueries({ queryKey: ["recruiterJobs"] });
+	};
+
+	const upsertLocalRow = (row) => {
+		if (!row?._id) {
+			return;
+		}
+
+		setEditingRows((prev) => {
+			const nextRow = toFormRow(row);
+			const index = prev.findIndex((item) => item._id === row._id);
+
+			if (index === -1) {
+				return [nextRow, ...prev];
+			}
+
+			return prev.map((item) => (item._id === row._id ? nextRow : item));
+		});
+	};
+
+	const removeLocalRow = (rowId) => {
+		setEditingRows((prev) => prev.filter((row) => row._id !== rowId));
+		setSelectedIds((prev) => prev.filter((id) => id !== rowId));
 	};
 
 	const { mutate: addRow, isPending: isAdding } = useMutation({
@@ -172,9 +211,10 @@ const RecruiterAutomatedJobPostingPage = () => {
 			const res = await axiosInstance.post("/job-rows", createDefaultRowPayload(authUser));
 			return res.data;
 		},
-		onSuccess: () => {
+		onSuccess: (createdRow) => {
 			toast.success("Row added");
-			refreshRows();
+			upsertLocalRow(createdRow);
+			queryClient.invalidateQueries({ queryKey: ["recruiterDashboard"] });
 		},
 		onError: (error) => {
 			toast.error(error.response?.data?.message || "Failed to add row");
@@ -186,9 +226,10 @@ const RecruiterAutomatedJobPostingPage = () => {
 			const res = await axiosInstance.put(`/job-rows/${rowId}`, payload);
 			return res.data;
 		},
-		onSuccess: () => {
+		onSuccess: (updatedRow) => {
 			toast.success("Row updated");
-			refreshRows();
+			upsertLocalRow(updatedRow);
+			queryClient.invalidateQueries({ queryKey: ["recruiterDashboard"] });
 		},
 		onError: (error) => {
 			toast.error(error.response?.data?.message || "Failed to update row");
@@ -198,10 +239,13 @@ const RecruiterAutomatedJobPostingPage = () => {
 	const { mutate: deleteRow, isPending: isDeleting } = useMutation({
 		mutationFn: async (rowId) => {
 			await axiosInstance.delete(`/job-rows/${rowId}`);
+			return rowId;
 		},
-		onSuccess: () => {
+		onSuccess: (rowId) => {
 			toast.success("Row deleted");
-			refreshRows();
+			removeLocalRow(rowId);
+			queryClient.invalidateQueries({ queryKey: ["recruiterDashboard"] });
+			queryClient.invalidateQueries({ queryKey: ["recruiterJobs"] });
 		},
 		onError: (error) => {
 			toast.error(error.response?.data?.message || "Failed to delete row");
@@ -213,9 +257,13 @@ const RecruiterAutomatedJobPostingPage = () => {
 			const res = await axiosInstance.post(`/job-rows/${rowId}/post-now`);
 			return res.data;
 		},
-		onSuccess: () => {
+		onSuccess: (result) => {
 			toast.success("Job posted");
-			refreshRows();
+			if (result?.row) {
+				upsertLocalRow(result.row);
+			}
+			queryClient.invalidateQueries({ queryKey: ["recruiterDashboard"] });
+			queryClient.invalidateQueries({ queryKey: ["recruiterJobs"] });
 		},
 		onError: (error) => {
 			toast.error(error.response?.data?.message || "Failed to post now");
@@ -227,14 +275,14 @@ const RecruiterAutomatedJobPostingPage = () => {
 			const res = await axiosInstance.post("/job-rows/bulk-action", {
 				action,
 				rowIds: selectedIds,
-				autoPostAt: action === "schedule" && sharedAutoPostAt ? new Date(sharedAutoPostAt).toISOString() : undefined,
+				autoPostAt: action === "schedule" && bulkAutoPostAt ? new Date(bulkAutoPostAt).toISOString() : undefined,
 			});
 			return res.data;
 		},
 		onSuccess: (result) => {
 			toast.success(result.message || "Bulk action completed");
 			setSelectedIds([]);
-			refreshRows();
+			refreshAllData();
 		},
 		onError: (error) => {
 			toast.error(error.response?.data?.message || "Bulk action failed");
@@ -250,7 +298,7 @@ const RecruiterAutomatedJobPostingPage = () => {
 		},
 		onSuccess: (result) => {
 			toast.success(`Imported ${result.createdCount} row(s)`);
-			refreshRows();
+			refreshAllData();
 		},
 		onError: (error) => {
 			toast.error(error.response?.data?.message || "Excel upload failed");
@@ -266,7 +314,7 @@ const RecruiterAutomatedJobPostingPage = () => {
 			toast.success(
 				`Scheduler run complete: posted ${result.postedCount}, duplicates ${result.duplicateCount}, failed ${result.failedCount}`
 			);
-			refreshRows();
+			refreshAllData();
 		},
 		onError: (error) => {
 			toast.error(error.response?.data?.message || "Failed to run scheduled processor");
@@ -367,11 +415,11 @@ const RecruiterAutomatedJobPostingPage = () => {
 
 					<div className="flex flex-wrap items-center gap-3">
 						<label className="text-sm text-slate-700">
-							<span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Shared Auto-Scheduler Time</span>
+							<span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Bulk Schedule Time</span>
 							<input
 								type="datetime-local"
-								value={sharedAutoPostAt}
-								onChange={(e) => setSharedAutoPostAt(e.target.value)}
+								value={bulkAutoPostAt}
+								onChange={(e) => setBulkAutoPostAt(e.target.value)}
 								className="rounded-lg border border-slate-300 bg-white px-3 py-2"
 							/>
 						</label>
@@ -547,6 +595,15 @@ const RecruiterAutomatedJobPostingPage = () => {
 											<option value="yes">Yes</option>
 										</select>
 									</label>
+									<label className="text-sm text-slate-700">
+										<span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Schedule Time</span>
+										<input
+											type="datetime-local"
+											value={row.autoPostAtInput || ""}
+											onChange={(e) => updateRow(row._id, { autoPostAtInput: e.target.value })}
+											className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+										/>
+									</label>
 									<div className="text-sm text-slate-700">
 										<span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Targeted Posting</span>
 										<div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -554,6 +611,7 @@ const RecruiterAutomatedJobPostingPage = () => {
 												<label className="inline-flex items-center gap-2 text-sm text-slate-700">
 													<input
 														type="radio"
+														name={`visibilityType-${row._id}`}
 														checked={row.visibilityType === "public"}
 														onChange={() =>
 															updateRow(row._id, {
@@ -568,6 +626,7 @@ const RecruiterAutomatedJobPostingPage = () => {
 												<label className="inline-flex items-center gap-2 text-sm text-slate-700">
 													<input
 														type="radio"
+														name={`visibilityType-${row._id}`}
 														checked={row.visibilityType === "targeted"}
 														onChange={() => updateRow(row._id, { visibilityType: "targeted" })}
 													/>
@@ -630,8 +689,8 @@ const RecruiterAutomatedJobPostingPage = () => {
 												payload: {
 													...normalizeRowForSave(row),
 													status: "scheduled",
-													autoPostAt: sharedAutoPostAt
-														? new Date(sharedAutoPostAt).toISOString()
+													autoPostAt: row.autoPostAtInput
+														? new Date(row.autoPostAtInput).toISOString()
 														: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
 												},
 											})

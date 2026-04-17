@@ -10,8 +10,9 @@ import { axiosInstance } from "../lib/axios";
 import { formatDistanceToNow } from "date-fns";
 import toast from "react-hot-toast";
 import { connectSocket } from "../lib/socket";
+import SmartImage from "../components/SmartImage";
 
-const fallbackAvatar = "https://i.sstatic.net/CpC9A.png";
+const fallbackAvatar = "/avatar.png";
 
 const getSafeRelativeTime = (value) => {
   if (!value) {
@@ -402,7 +403,7 @@ const Messages = () => {
               {/* Chat Header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white shadow-sm">
                 <div className="flex items-center gap-3">
-                  <img
+                  <SmartImage
                     className="w-12 h-12 rounded-full object-cover"
                     src={activeUser?.profilePicture || fallbackAvatar}
                     alt={activeUser?.name || "Profile"}
@@ -435,7 +436,7 @@ const Messages = () => {
                 ) : (
                   <>
                     <div className="flex flex-col items-center text-center">
-                      <img
+                      <SmartImage
                         className="rounded-full w-20 h-20 object-cover shadow-md"
                         src={activeUser?.profilePicture || fallbackAvatar}
                         alt={activeUser?.name || "Profile"}
@@ -499,7 +500,7 @@ const Messages = () => {
                             key={message._id}
                             className="flex items-start gap-3"
                           >
-                            <img
+                            <SmartImage
                               className="w-10 h-10 rounded-full object-cover"
                               src={activeUser?.profilePicture || fallbackAvatar}
                               alt={activeUser?.name || "Profile"}

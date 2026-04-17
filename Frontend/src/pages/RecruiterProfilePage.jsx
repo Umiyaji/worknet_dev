@@ -4,6 +4,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Building2, MapPin, BriefcaseBusiness, Globe, ArrowLeft, Camera, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useEffect, useRef, useState } from "react";
+import SmartImage from "../components/SmartImage";
+import { resolveImageUrl } from "../lib/imageUrl";
 
 const fileToDataUrl = (file) =>
   new Promise((resolve, reject) => {
@@ -139,7 +141,7 @@ const RecruiterProfilePage = () => {
         <div className="relative h-48 bg-gradient-to-r from-slate-800 via-slate-700 to-slate-900 bg-cover bg-center"
           style={{
             backgroundImage: recruiter.companyBanner
-              ? `linear-gradient(rgba(15, 23, 42, 0.3), rgba(15, 23, 42, 0.5)), url('${recruiter.companyBanner}')`
+              ? `linear-gradient(rgba(15, 23, 42, 0.3), rgba(15, 23, 42, 0.5)), url('${resolveImageUrl(recruiter.companyBanner)}')`
               : undefined,
           }}
         >
@@ -178,7 +180,7 @@ const RecruiterProfilePage = () => {
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="relative">
-                <img
+                <SmartImage
                   src={recruiter.companyLogo || recruiter.profilePicture || "/avatar.png"}
                   alt={recruiter.companyName || recruiter.name}
                   className="h-20 w-20 rounded-xl object-cover border-4 border-white -mt-12 bg-white shadow-md"
@@ -327,7 +329,7 @@ const RecruiterProfilePage = () => {
             {data.openJobs.map((job) => (
               <div key={job._id} className="rounded-lg border border-slate-200 p-4 flex justify-between gap-2">
                 <div className="flex items-start gap-3">
-                  <img
+                  <SmartImage
                     src={recruiter.companyLogo || recruiter.profilePicture || "/avatar.png"}
                     alt={recruiter.companyName || recruiter.name}
                     className="h-10 w-10 rounded-lg object-cover border border-slate-200 bg-white"

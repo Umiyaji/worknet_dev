@@ -78,7 +78,7 @@ const excelRowToPayload = (row) => ({
 export const listJobRows = async (req, res) => {
 	try {
 		const rows = await JobRow.find({ recruiterId: req.user._id })
-			.sort({ updatedAt: -1 })
+			.sort({ createdAt: -1 })
 			.populate("postId", "_id createdAt")
 			.populate("jobId", "_id");
 

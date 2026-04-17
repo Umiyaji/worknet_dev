@@ -1,4 +1,4 @@
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+import { generateGeminiContent } from "../lib/gemini.js";
 
 const supportedTextMimeTypes = new Set([
 	"text/plain",
@@ -126,29 +126,25 @@ export const generatePostDraft = async (req, res) => {
 			return res.status(500).json({ message: "GEMINI_API_KEY is not configured" });
 		}
 
-		const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-		const response = await fetch(
-			`${GEMINI_API_URL}/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-			{
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({
-					contents: [
-						{
-							parts: buildGeminiParts({ prompt, file }),
-						},
-					],
-				}),
-			}
-		);
-
-		const data = await response.json();
-		if (!response.ok) {
-			console.error("Gemini API error:", data);
+		const { data, model } = await generateGeminiContent({
+			models: [
+				process.env.GEMINI_MODEL || "gemini-2.5-flash",
+				...(String(process.env.GEMINI_FALLBACK_MODELS || "gemini-2.0-flash")
+					.split(",")
+					.map((value) => value.trim())
+					.filter(Boolean)),
+			],
+			body: {
+				contents: [
+					{
+						parts: buildGeminiParts({ prompt, file }),
+					},
+				],
+			},
+		});
+		if (!data) {
 			return res.status(502).json({
-				message: data?.error?.message || "Failed to generate AI draft",
+				message: "Failed to generate AI draft",
 			});
 		}
 
@@ -164,6 +160,8 @@ export const generatePostDraft = async (req, res) => {
 		});
 	} catch (error) {
 		console.error("Error in generatePostDraft controller:", error);
-		res.status(500).json({ message: "Server error" });
+		res.status(error?.status === 429 || error?.status === 503 ? 503 : 500).json({
+			message: error?.message || "Server error",
+		});
 	}
 };

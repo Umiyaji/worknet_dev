@@ -1,8 +1,8 @@
 import JobRow from "../models/jobRow.model.js";
 import Job from "../models/job.model.js";
 import Post from "../models/post.model.js";
-
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+import { generateGeminiContent } from "./gemini.js";
+import XLSX from "xlsx";
 const DEFAULT_SOURCE = "automated-job-row";
 const ROW_LOCK_STALE_MS = 15 * 60 * 1000;
 
@@ -67,6 +67,24 @@ const normalizeTargetValues = (values) => {
 const parseDateValue = (value, fallbackEndOfDay = false) => {
 	if (!value) return null;
 	if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+	if (typeof value === "number") {
+		const excelDate = XLSX.SSF.parse_date_code(value);
+		if (excelDate?.y && excelDate?.m && excelDate?.d) {
+			const hasTimeComponent = Boolean(excelDate.H || excelDate.M || excelDate.S || excelDate.u);
+			const parsedFromExcel = new Date(
+				Date.UTC(
+					excelDate.y,
+					excelDate.m - 1,
+					excelDate.d,
+					hasTimeComponent ? excelDate.H || 0 : fallbackEndOfDay ? 23 : 0,
+					hasTimeComponent ? excelDate.M || 0 : fallbackEndOfDay ? 59 : 0,
+					hasTimeComponent ? excelDate.S || 0 : fallbackEndOfDay ? 59 : 0,
+					hasTimeComponent ? Math.round((excelDate.u || 0) * 1000) : fallbackEndOfDay ? 999 : 0
+				)
+			);
+			return Number.isNaN(parsedFromExcel.getTime()) ? null : parsedFromExcel;
+		}
+	}
 
 	const parsed = new Date(value);
 	if (Number.isNaN(parsed.getTime())) return null;
@@ -80,10 +98,7 @@ const parseDateValue = (value, fallbackEndOfDay = false) => {
 
 const parseAutoPostAt = (value) => {
 	if (!value) return null;
-	if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
-
-	const parsed = new Date(value);
-	return Number.isNaN(parsed.getTime()) ? null : parsed;
+	return parseDateValue(value, false);
 };
 
 const toWorkModeLabel = (jobType) => {
@@ -148,23 +163,21 @@ const generateAiJobPost = async (row) => {
 		return buildFallbackPostContent(row);
 	}
 
-	const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-	const response = await fetch(
-		`${GEMINI_API_URL}/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-		{
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				contents: [{ parts: [{ text: buildAiPrompt(row) }] }],
-			}),
-		}
-	);
+	const { data, model } = await generateGeminiContent({
+		models: [
+			process.env.GEMINI_MODEL || "gemini-2.5-flash",
+			...(String(process.env.GEMINI_FALLBACK_MODELS || "gemini-2.0-flash")
+				.split(",")
+				.map((value) => value.trim())
+				.filter(Boolean)),
+		],
+		body: {
+			contents: [{ parts: [{ text: buildAiPrompt(row) }] }],
+		},
+	});
 
-	const data = await response.json();
-	if (!response.ok) {
-		throw new Error(data?.error?.message || "AI post generation failed");
+	if (model) {
+		console.log(`Gemini automated job post used model: ${model}`);
 	}
 
 	return stripMarkdownFormatting(parseGeminiText(data)) || buildFallbackPostContent(row);

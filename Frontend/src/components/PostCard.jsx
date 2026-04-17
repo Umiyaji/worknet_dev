@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ThumbsUp, MessageCircle, Share2 } from "lucide-react";
+import SmartImage from "./SmartImage";
 
 const PostCard = ({ post, likePost, handleCommentPost, handleSharePost }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -14,7 +15,7 @@ const PostCard = ({ post, likePost, handleCommentPost, handleSharePost }) => {
       <div className="p-4 border-b border-gray-100">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <img
+            <SmartImage
               src={post.author.profilePicture || "/avatar.png"}
               alt={post.author.name}
               className="w-12 h-12 rounded-full object-cover"

@@ -2,8 +2,7 @@ import User from "../models/user.model.js";
 import cloudinary from "../lib/cloudinary.js";
 import fs from "fs/promises";
 import path from "path";
-
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+import { generateGeminiContent } from "../lib/gemini.js";
 const CURRENT_TOKENS = new Set(["present", "current", "ongoing", "now", "till date", "today"]);
 
 const getMimeTypeFromExtension = (filePath = "") => {
@@ -174,6 +173,7 @@ Extract resume information and return strict JSON only.
 
 Output format:
 {
+  "headline": "short professional headline in under 12 words",
   "about": "short professional summary in 2-4 lines",
   "skills": ["skill1", "skill2"],
   "experience": [
@@ -199,6 +199,10 @@ Rules:
 - Return valid JSON only.
 - If a field is missing in resume, use empty string or empty array.
 - Keep skills concise and deduplicated.
+- Keep headline factual and role-focused. Do not invent seniority or employer names unless clearly present.
+- For experience, preserve the role title and company exactly when available.
+- For education, extract college/school and degree/field carefully.
+- Do not rewrite the resume creatively. Extract what is present.
 - Do not invent details.
 `.trim();
 
@@ -207,7 +211,6 @@ const extractProfileDataFromResume = async (filePath, mimetype) => {
 		return null;
 	}
 
-	const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 	const fileBuffer = await fs.readFile(filePath);
 	const normalizedMimeType = mimetype || getMimeTypeFromExtension(filePath);
 
@@ -215,37 +218,36 @@ const extractProfileDataFromResume = async (filePath, mimetype) => {
 		return null;
 	}
 
-	const response = await fetch(
-		`${GEMINI_API_URL}/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-		{
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				contents: [
-					{
-						parts: [
-							{ text: getResumeExtractionPrompt() },
-							{
-								inline_data: {
-									mime_type: normalizedMimeType,
-									data: fileBuffer.toString("base64"),
-								},
+	const { data, model } = await generateGeminiContent({
+		models: [
+			process.env.GEMINI_MODEL || "gemini-2.5-flash",
+			...(String(process.env.GEMINI_FALLBACK_MODELS || "gemini-2.0-flash")
+				.split(",")
+				.map((value) => value.trim())
+				.filter(Boolean)),
+		],
+		body: {
+			contents: [
+				{
+					parts: [
+						{ text: getResumeExtractionPrompt() },
+						{
+							inline_data: {
+								mime_type: normalizedMimeType,
+								data: fileBuffer.toString("base64"),
 							},
-						],
-					},
-				],
-				generationConfig: {
-					responseMimeType: "application/json",
+						},
+					],
 				},
-			}),
-		}
-	);
+			],
+			generationConfig: {
+				responseMimeType: "application/json",
+			},
+		},
+	});
 
-	const data = await response.json();
-	if (!response.ok) {
-		throw new Error(data?.error?.message || "Failed to extract resume data");
+	if (model) {
+		console.log(`Gemini resume extraction used model: ${model}`);
 	}
 
 	const outputText = parseGeminiText(data);
@@ -255,6 +257,7 @@ const extractProfileDataFromResume = async (filePath, mimetype) => {
 	}
 
 	return {
+		headline: normalizeString(parsed.headline),
 		about: normalizeString(parsed.about),
 		skills: normalizeSkills(parsed.skills),
 		experience: normalizeExperience(parsed.experience),
@@ -395,6 +398,9 @@ export const uploadResume = async (req, res) => {
 				if (extracted.about) {
 					user.about = extracted.about;
 				}
+				if (extracted.headline) {
+					user.headline = extracted.headline;
+				}
 				if (extracted.skills.length) {
 					user.skills = extracted.skills;
 				}
@@ -405,6 +411,7 @@ export const uploadResume = async (req, res) => {
 					user.education = extracted.education;
 				}
 				extractionApplied = Boolean(
+					extracted.headline ||
 					extracted.about ||
 						extracted.skills.length ||
 						extracted.experience.length ||
@@ -434,7 +441,7 @@ export const deleteProfilePicture = async (req, res) => {
 		const user = await User.findById(req.user.id);
 		if (!user) return res.status(404).json({ message: "User not found" });
 
-		user.profilePicture = null;
+		user.profilePicture = "";
 		await user.save();
 
 		res.json({ message: "Profile picture deleted successfully" });
@@ -450,7 +457,7 @@ export const deleteBannerImage = async (req, res) => {
 		const user = await User.findById(req.user.id);
 		if (!user) return res.status(404).json({ message: "User not found" });
 
-		user.bannerImg = null;
+		user.bannerImg = "";
 		await user.save();
 
 		res.json({ message: "Banner image deleted successfully" });

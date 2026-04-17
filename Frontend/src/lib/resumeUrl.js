@@ -1,14 +1,4 @@
-import { axiosInstance } from "./axios";
-
-const getBackendOrigin = () => {
-  const baseURL = axiosInstance.defaults.baseURL || "";
-
-  try {
-    return new URL(baseURL).origin;
-  } catch {
-    return window.location.origin;
-  }
-};
+import { getBackendOrigin } from "./imageUrl";
 
 export const resolveResumeUrl = (resumeUrl) => {
   if (!resumeUrl) {

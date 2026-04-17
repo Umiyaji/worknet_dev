@@ -3,6 +3,7 @@ import { useState } from "react";
 import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
 import { FileText, Image, Loader, Sparkles, Wand2, X } from "lucide-react";
+import SmartImage from "./SmartImage";
 
 const PostCreation = ({ user }) => {
 	const [content, setContent] = useState("");
@@ -157,7 +158,7 @@ const PostCreation = ({ user }) => {
 	return (
 		<div className="bg-secondary rounded-lg shadow mb-2 md:mb-4 lg:mb-4 p-4">
 			<div className="flex space-x-3">
-				<img
+				<SmartImage
 					src={
 						user?.role === "recruiter"
 							? user?.companyLogo || user?.profilePicture || "/avatar.png"

@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { axiosInstance } from "../lib/axios";
+import { cropImageToDataUrl } from "../lib/cropImage";
+import { resolveImageUrl } from "../lib/imageUrl";
 import { resolveResumeUrl } from "../lib/resumeUrl";
 import { toast } from "react-hot-toast";
 import {
@@ -18,11 +20,24 @@ import {
   Edit2,
   FileUp,
 } from "lucide-react";
+import SmartImage from "./SmartImage";
+
+const CROPPER_SIZE = 320;
 
 const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
   const [editingField, setEditingField] = useState(null);
   const [editedData, setEditedData] = useState({});
   const [resumeUploadProgress, setResumeUploadProgress] = useState(0);
+  const [cropModal, setCropModal] = useState({
+    open: false,
+    source: "",
+    zoom: 1,
+    offsetX: 0,
+    offsetY: 0,
+    imageWidth: 0,
+    imageHeight: 0,
+  });
+  const [isSavingCroppedPhoto, setIsSavingCroppedPhoto] = useState(false);
   const queryClient = useQueryClient();
 
   const authUser = queryClient.getQueryData(["authUser"]);
@@ -274,18 +289,58 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
   // Handle image uploads
   const handleImageChange = (event) => {
     const file = event.target.files?.[0] ?? null;
+    const fieldName = event.target.name;
 
     if (!file) {
       return;
     }
 
+    if (fieldName !== "profilePicture") {
+      const reader = new FileReader();
+
+      reader.onloadend = () => {
+        setEditedData((prev) => ({
+          ...prev,
+          [fieldName]: reader.result,
+        }));
+      };
+
+      reader.onerror = () => {
+        toast.error("Failed to load image");
+      };
+
+      reader.readAsDataURL(file);
+      event.target.value = "";
+      return;
+    }
+
     const reader = new FileReader();
 
-    reader.onloadend = () => {
-      setEditedData((prev) => ({
-        ...prev,
-        [event.target.name]: reader.result,
-      }));
+    reader.onloadend = async () => {
+      try {
+        const source = reader.result;
+        const image = new Image();
+
+        image.onload = () => {
+          setCropModal({
+            open: true,
+            source,
+            zoom: 1,
+            offsetX: 0,
+            offsetY: 0,
+            imageWidth: image.naturalWidth || image.width || 0,
+            imageHeight: image.naturalHeight || image.height || 0,
+          });
+        };
+
+        image.onerror = () => {
+          toast.error("Failed to prepare image for cropping");
+        };
+
+        image.src = source;
+      } catch (_error) {
+        toast.error("Failed to prepare image for cropping");
+      }
     };
 
     reader.onerror = () => {
@@ -293,6 +348,50 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
     };
 
     reader.readAsDataURL(file);
+    event.target.value = "";
+  };
+
+  const closeCropModal = (force = false) => {
+    if (isSavingCroppedPhoto && !force) {
+      return;
+    }
+
+    setCropModal({
+      open: false,
+      source: "",
+      zoom: 1,
+      offsetX: 0,
+      offsetY: 0,
+      imageWidth: 0,
+      imageHeight: 0,
+    });
+  };
+
+  const handleCropSave = async () => {
+    if (!cropModal.source) {
+      return;
+    }
+
+    try {
+      setIsSavingCroppedPhoto(true);
+      const croppedImage = await cropImageToDataUrl({
+        src: cropModal.source,
+        zoom: cropModal.zoom,
+        offsetX: cropModal.offsetX,
+        offsetY: cropModal.offsetY,
+      });
+
+      setEditedData((prev) => ({
+        ...prev,
+        profilePicture: croppedImage,
+      }));
+      onSave({ profilePicture: croppedImage });
+      closeCropModal(true);
+    } catch (_error) {
+      toast.error("Failed to crop image");
+    } finally {
+      setIsSavingCroppedPhoto(false);
+    }
   };
 
   // Handle resume file upload
@@ -412,6 +511,15 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
   const displayResume = editedData.resume ?? userData.resume;
   const resolvedResumeUrl = resolveResumeUrl(displayResume);
   const hasResume = Boolean(displayResume);
+  const cropBaseScale =
+    cropModal.imageWidth && cropModal.imageHeight
+      ? Math.max(
+          CROPPER_SIZE / cropModal.imageWidth,
+          CROPPER_SIZE / cropModal.imageHeight,
+        )
+      : 1;
+  const cropPreviewWidth = cropModal.imageWidth * cropBaseScale * cropModal.zoom;
+  const cropPreviewHeight = cropModal.imageHeight * cropBaseScale * cropModal.zoom;
 
   return (
     <div className="bg-white shadow rounded-lg mb-6">
@@ -419,7 +527,7 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
       <div
         className="relative h-48 rounded-t-lg bg-cover bg-center"
         style={{
-          backgroundImage: `url('${editedData.bannerImg || userData.bannerImg || "/banner.png"}')`,
+          backgroundImage: `url('${resolveImageUrl(editedData.bannerImg || userData.bannerImg || "/banner.png")}')`,
         }}
       >
         {isOwnProfile && (
@@ -453,7 +561,7 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
       {/* Profile Picture */}
       <div className="p-4">
         <div className="relative -mt-20 mb-4 flex justify-center">
-          <img
+          <SmartImage
             className="w-32 h-32 rounded-full object-cover"
             src={
               editedData.profilePicture ||
@@ -709,6 +817,136 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
           <div className="flex justify-center">{renderConnectionButton()}</div>
         )}
       </div>
+
+      {cropModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-2xl rounded-3xl bg-white shadow-2xl">
+            <div className="border-b border-slate-200 px-6 py-4">
+              <h3 className="text-xl font-semibold text-slate-900">Crop Profile Photo</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Adjust the image inside the circle, then save the cropped profile photo.
+              </p>
+            </div>
+
+            <div className="grid gap-6 px-6 py-5 lg:grid-cols-[1fr_260px]">
+              <div className="flex items-center justify-center">
+                <div className="relative h-80 w-80 overflow-hidden rounded-full border-4 border-slate-200 bg-slate-100 shadow-inner">
+                  <img
+                    src={cropModal.source}
+                    alt="Crop preview"
+                    className="absolute left-1/2 top-1/2 max-w-none select-none"
+                    style={{
+                      width: cropPreviewWidth || CROPPER_SIZE,
+                      height: cropPreviewHeight || CROPPER_SIZE,
+                      transform: `translate(calc(-50% + ${cropModal.offsetX}px), calc(-50% + ${cropModal.offsetY}px))`,
+                    }}
+                    draggable="false"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Zoom
+                  </label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="3"
+                    step="0.01"
+                    value={cropModal.zoom}
+                    onChange={(e) =>
+                      setCropModal((prev) => ({
+                        ...prev,
+                        zoom: Number(e.target.value),
+                      }))
+                    }
+                    className="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Move Left / Right
+                  </label>
+                  <input
+                    type="range"
+                    min="-220"
+                    max="220"
+                    step="1"
+                    value={cropModal.offsetX}
+                    onChange={(e) =>
+                      setCropModal((prev) => ({
+                        ...prev,
+                        offsetX: Number(e.target.value),
+                      }))
+                    }
+                    className="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Move Up / Down
+                  </label>
+                  <input
+                    type="range"
+                    min="-220"
+                    max="220"
+                    step="1"
+                    value={cropModal.offsetY}
+                    onChange={(e) =>
+                      setCropModal((prev) => ({
+                        ...prev,
+                        offsetY: Number(e.target.value),
+                      }))
+                    }
+                    className="w-full"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCropModal((prev) => ({
+                      ...prev,
+                      zoom: 1,
+                      offsetX: 0,
+                      offsetY: 0,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+              <button
+                type="button"
+                onClick={closeCropModal}
+                disabled={isSavingCroppedPhoto}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCropSave}
+                disabled={isSavingCroppedPhoto}
+                className="inline-flex items-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark disabled:opacity-60"
+              >
+                {isSavingCroppedPhoto ? (
+                  <Loader2 size={16} className="mr-2 animate-spin" />
+                ) : null}
+                Save Photo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

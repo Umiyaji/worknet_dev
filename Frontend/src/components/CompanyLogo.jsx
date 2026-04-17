@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { resolveImageUrl } from "../lib/imageUrl";
 
 const defaultLogo = "/worknet_logo_1.png";
 
@@ -12,10 +13,12 @@ const getInitials = (name = "") =>
     .toUpperCase();
 
 const CompanyLogo = ({ src, name = "Company", className = "" }) => {
-  const [imageSrc, setImageSrc] = useState(src || defaultLogo);
+  const [imageSrc, setImageSrc] = useState(
+    resolveImageUrl(src) || defaultLogo
+  );
 
   useEffect(() => {
-    setImageSrc(src || defaultLogo);
+    setImageSrc(resolveImageUrl(src) || defaultLogo);
   }, [src]);
 
   if (!imageSrc) {

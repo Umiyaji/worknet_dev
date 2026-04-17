@@ -20,6 +20,7 @@ import {
 	Image,
 } from "lucide-react";
 import PostAction from "./PostAction";
+import SmartImage from "./SmartImage";
 
 
 
@@ -286,7 +287,7 @@ const Post = ({ post }) => {
 				<div className='flex items-center justify-between mb-4'>
 					<div className='flex items-center'>
 						<Link to={`/profile/${post?.author?.username}`}>
-							<img
+							<SmartImage
 								src={post.author.profilePicture || "/avatar.png"}
 								alt={post.author.name}
 								className='size-14 rounded-full mr-3'
@@ -515,7 +516,7 @@ const Post = ({ post }) => {
 								key={comment._id || `${comment.user._id}-${comment.createdAt}-${index}`}
 								className='mb-2 bg-base-100 p-2 rounded flex items-start'
 							>
-								<img
+								<SmartImage
 									src={comment.user.profilePicture || "/avatar.png"}
 									alt={comment.user.name}
 									className='w-8 h-8 rounded-full mr-2 flex-shrink-0'

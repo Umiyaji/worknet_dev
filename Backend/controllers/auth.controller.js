@@ -41,7 +41,7 @@ const hasCompanyInfo = (companyFields) =>
 			companyFields.HRName
 	);
 
-const getDefaultProfilePicture = () => `${(process.env.CLIENT_URL || "http://localhost:5173").replace(/\/$/, "")}/avatar.png`;
+const getDefaultProfilePicture = () => "";
 
 const isStrongPassword = (password) =>
 	typeof password === "string" &&

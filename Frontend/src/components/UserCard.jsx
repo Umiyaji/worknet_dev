@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom";
+import SmartImage from "./SmartImage";
 
 function UserCard({ user, isConnection }) {
 	return (
 		<div className='bg-white rounded-lg shadow p-4 flex flex-col items-center transition-all hover:shadow-md'>
 			<Link to={`/profile/${user.username}`} className='flex flex-col items-center'>
-				<img
+				<SmartImage
 					src={user.profilePicture || "/avatar.png"}
 					alt={user.name}
 					className='w-12 h-12 md:w-24 md:h-24 lg:w-24 lg:h-24 rounded-full object-cover mb-2 md:mb-4 lg:mb-4'

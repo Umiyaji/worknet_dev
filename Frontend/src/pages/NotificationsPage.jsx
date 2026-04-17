@@ -5,6 +5,7 @@ import { toast } from "react-hot-toast";
 import { Briefcase, ExternalLink, Eye, MessageSquare, ThumbsUp, Trash2, UserPlus } from "lucide-react";
 import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import SmartImage from "../components/SmartImage";
 import { formatDistanceToNow } from "date-fns";
 import { Loader } from "lucide-react";
 
@@ -152,7 +153,7 @@ const NotificationsPage = () => {
 										<div className='flex items-start justify-between'>
 											<div className='flex items-center space-x-3 md:space-x-4 lg:space-x-4'>
 												<Link to={`/profile/${notification.relatedUser.username}`}>
-													<img
+													<SmartImage
 														src={notification.relatedUser.profilePicture || "/avatar.png"}
 														alt={notification.relatedUser.name}
 														className='w-10 h-10 md:w-12 md:h-12 lg:w-12 lg:h-12 rounded-full object-cover'

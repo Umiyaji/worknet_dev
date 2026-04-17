@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
 import { Link } from "react-router-dom";
+import SmartImage from "./SmartImage";
 
 const FriendRequest = ({ request }) => {
 	const queryClient = useQueryClient();
@@ -43,7 +44,7 @@ const FriendRequest = ({ request }) => {
 			<div className='flex items-center gap-3 md:gap-4 lg:gap-4'>
 				<Link
 					to={`/profile/${request.sender.username}`}>
-					<img
+					<SmartImage
 						src={request.sender.profilePicture || "/avatar.png"}
 						alt={request.name}
 						className='w-12 h-12 md:w-16 md:h-16 lg:w-16 lg:h-16 rounded-full object-cover'

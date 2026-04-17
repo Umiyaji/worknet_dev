@@ -4,6 +4,7 @@ import RecruiterShell from "../components/recruiter/RecruiterShell";
 import { Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import CompanyLogo from "../components/CompanyLogo";
+import SmartImage from "../components/SmartImage";
 
 const recruiterStatuses = ["applied", "reviewing", "shortlisted", "rejected", "hired"];
 
@@ -178,7 +179,7 @@ const RecruiterDashboardPage = () => {
                 className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 hover:bg-slate-50 md:flex-row md:items-center md:justify-between"
               >
                 <div className="flex items-center gap-3">
-                  <img
+                  <SmartImage
                     src={application.userId?.profilePicture || "/avatar.png"}
                     alt={application.userId?.name || application.fullName || "Applicant"}
                     className="h-11 w-11 rounded-xl object-cover border border-slate-200 bg-white"

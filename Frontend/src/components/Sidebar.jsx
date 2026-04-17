@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Home, UserPlus, Bell } from "lucide-react";
+import SmartImage from "./SmartImage";
 
 export default function Sidebar({ user }) {
 	if (!user) return null;
@@ -28,7 +29,7 @@ export default function Sidebar({ user }) {
 				/>
 
 				<Link to={`/profile/${user?.username}`}>
-					<img
+					<SmartImage
 						src={avatarImage}
 						alt={displayName}
 						className='w-20 h-20 rounded-full mx-auto mt-[-40px]'
