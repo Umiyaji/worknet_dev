@@ -1,9 +1,22 @@
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Home, UserPlus, Bell } from "lucide-react";
 import SmartImage from "./SmartImage";
+import { axiosInstance } from "../lib/axios";
 
 export default function Sidebar({ user }) {
+	const { data: connections } = useQuery({
+		queryKey: ["connections"],
+		queryFn: () => axiosInstance.get("/connections"),
+		enabled: Boolean(user?._id),
+	});
 	if (!user) return null;
+
+	const fallbackConnectionsCount = Array.isArray(user?.connections)
+		? user.connections.length
+		: 0;
+	const connectionsCount = connections?.data?.length ?? fallbackConnectionsCount;
+
 	const isRecruiter = user?.role === "recruiter";
 	const coverImage = isRecruiter
 		? user?.companyBanner || user?.bannerImg || "/banner.png"
@@ -45,7 +58,7 @@ export default function Sidebar({ user }) {
 				</p>
 
 				<p className='text-info text-xs'>
-					{user?.connections?.length || 0} connections
+					{connectionsCount} connections
 				</p>
 			</div>
 

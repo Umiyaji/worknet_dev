@@ -2,6 +2,7 @@ import cloudinary from "../lib/cloudinary.js";
 import Post from "../models/post.model.js";
 import User from "../models/user.model.js"
 import Notification from "../models/notification.model.js";
+import { getPagination } from "../lib/pagination.js";
 
 const normalizeSkills = (skillsRequired) => {
 	if (Array.isArray(skillsRequired)) {
@@ -142,10 +143,42 @@ const sanitizeJobDetailsForViewer = (jobDetails, viewer, { isOwner = false } = {
 	return sanitizedDetails;
 };
 
+const extractMentions = (content = "") =>
+	Array.from(
+		new Set(
+			String(content)
+				.match(/@([a-zA-Z0-9_]{2,30})/g)?.map((token) => token.slice(1).toLowerCase()) || []
+		)
+	);
+
+const extractHashtags = (content = "") =>
+	Array.from(
+		new Set(
+			String(content)
+				.match(/#([a-zA-Z0-9_]{2,50})/g)?.map((token) => token.slice(1).toLowerCase()) || []
+		)
+	);
+
+const stripMentionPrefix = (content = "") =>
+	String(content).replace(/(^|\s)@([a-zA-Z0-9_]{2,30})(?=\b)/g, "$1$2");
+
+const normalizeMediaArray = (media) => {
+	if (!Array.isArray(media)) {
+		return [];
+	}
+	return media
+		.map((item) => ({
+			url: typeof item?.url === "string" ? item.url.trim() : "",
+			type: "image",
+		}))
+		.filter((item) => item.url);
+};
+
 
 export const getFeedPosts = async (req, res) => {
 	try {
 		const now = new Date();
+		const { limit, skip } = getPagination(req.query, { defaultLimit: 25, maxLimit: 50 });
 		const college = normalizeTargetContext(req.user?.college);
 		const city = normalizeTargetContext(req.user?.city);
 		const targetedMatchOr = [];
@@ -187,20 +220,43 @@ export const getFeedPosts = async (req, res) => {
 		})
 			.populate("author", "name username profilePicture headline")
 			.populate("comments.user", "name profilePicture")
-			.sort({ publishAt: -1, createdAt: -1 });
+			.sort({ publishAt: -1, createdAt: -1 })
+			.skip(skip)
+			.limit(limit)
+			.lean();
 
-		res.status(200).json(
-			posts.map((post) => {
-				const isOwner = req.user?._id?.toString() === post.author?._id?.toString();
-				const postObject = post.toObject();
+		const normalizedPosts = posts
+			.map((post) => {
+				const postObject = { ...post };
+				const hasAuthor = Boolean(postObject.author?._id);
 
+				// Legacy/deleted author handling:
+				// - normal posts without author are skipped from feed
+				// - job posts get a deterministic fallback so UI never shows "Unknown"
+				if (!hasAuthor) {
+					if (postObject.postType !== "job") {
+						return null;
+					}
+
+					postObject.author = {
+						_id: `job-fallback-${postObject._id}`,
+						name: postObject.jobDetails?.companyName || "Hiring Team",
+						username: "",
+						profilePicture: "",
+						headline: "Job post",
+					};
+				}
+
+				const isOwner = req.user?._id?.toString() === postObject.author?._id?.toString();
 				if (postObject.postType === "job" && postObject.jobDetails) {
 					postObject.jobDetails = sanitizeJobDetailsForViewer(postObject.jobDetails, req.user, { isOwner });
 				}
 
 				return postObject;
 			})
-		);
+			.filter(Boolean);
+
+		res.status(200).json(normalizedPosts);
 	} catch (error) {
 		console.error("Error in getFeedPosts controller:", error);
 		res.status(500).json({ message: "Server error" });
@@ -209,10 +265,16 @@ export const getFeedPosts = async (req, res) => {
 
 export const createPost = async (req, res) => {
 	try {
-		const { content } = req.body;
+		const rawContent = typeof req.body?.content === "string" ? req.body.content : "";
+		const content = stripMentionPrefix(rawContent);
+		const bodyMedia = normalizeMediaArray(req.body?.media);
 		console.log("Creating post - Content:", content, "Has file:", !!req.file, "Content-Type:", req.headers["content-type"]);
 		
 		let newPost;
+		const metadata = {
+			mentions: extractMentions(rawContent),
+			hashtags: extractHashtags(content),
+		};
 
 		// Check if file was uploaded via multer
 		if (req.file) {
@@ -227,6 +289,8 @@ export const createPost = async (req, res) => {
 					author: req.user._id,
 					content,
 					image: imgResult.secure_url,
+					media: [{ url: imgResult.secure_url, type: "image" }],
+					...metadata,
 				});
 			} catch (cloudinaryError) {
 				console.error("Cloudinary upload error:", cloudinaryError);
@@ -240,6 +304,8 @@ export const createPost = async (req, res) => {
 			newPost = new Post({
 				author: req.user._id,
 				content,
+				media: bodyMedia,
+				...metadata,
 			});
 		}
 
@@ -356,7 +422,7 @@ export const createAutomatedJobPost = async (req, res) => {
 export const updatePost = async (req, res) => {
 	try {
 		const { id } = req.params;
-		const { content, image } = req.body;
+		const { content, image, media } = req.body;
 		const userId = req.user._id;
 
 		const post = await Post.findById(id);
@@ -369,8 +435,20 @@ export const updatePost = async (req, res) => {
 			return res.status(403).json({ message: "You can't edit this post" });
 		}
 
-		if (content !== undefined) post.content = content;
+		if (content !== undefined) {
+			post.editHistory = [
+				...(Array.isArray(post.editHistory) ? post.editHistory : []),
+				{ previousContent: post.content || "", editedAt: new Date() },
+			];
+			const normalizedContent = stripMentionPrefix(content);
+			post.content = normalizedContent;
+			post.mentions = extractMentions(content);
+			post.hashtags = extractHashtags(normalizedContent);
+		}
 		if (image !== undefined) post.image = image;
+		if (media !== undefined) {
+			post.media = normalizeMediaArray(media);
+		}
 
 		const updatedPost = await post.save();
 		res.status(200).json(updatedPost);
@@ -441,6 +519,10 @@ export const getPostById = async (req, res) => {
 		}
 
 		const postObject = post.toObject();
+		if (req.user?._id && req.user._id.toString() !== post.author?._id?.toString()) {
+			await Post.updateOne({ _id: post._id }, { $inc: { viewCount: 1 } });
+			postObject.viewCount = (postObject.viewCount || 0) + 1;
+		}
 		if (postObject.postType === "job" && postObject.jobDetails) {
 			postObject.jobDetails = sanitizeJobDetailsForViewer(postObject.jobDetails, req.user, { isOwner });
 		}
@@ -532,7 +614,8 @@ export const getUserPosts = async (req, res) => {
 		const { username } = req.params;
 		
 		// Find user by username
-		const user = await User.findOne({ username });
+		const { limit, skip } = getPagination(req.query, { defaultLimit: 25, maxLimit: 50 });
+		const user = await User.findOne({ username }).select("_id").lean();
 		if (!user) {
 			return res.status(404).json({ message: "User not found" });
 		}
@@ -547,7 +630,10 @@ export const getUserPosts = async (req, res) => {
 		const posts = await Post.find(postQuery)
 			.populate("author", "name username profilePicture headline")
 			.populate("comments.user", "name profilePicture username headline")
-			.sort({ publishAt: -1, createdAt: -1 });
+			.sort({ publishAt: -1, createdAt: -1 })
+			.skip(skip)
+			.limit(limit)
+			.lean();
 
 		res.status(200).json(posts);
 	} catch (error) {
@@ -559,31 +645,52 @@ export const getUserPosts = async (req, res) => {
 export const likePost = async (req, res) => {
 	try {
 		const postId = req.params.id;
-		const post = await Post.findById(postId);
 		const userId = req.user._id;
-
-		if (post.likes.includes(userId)) {
-			post.likes = post.likes.filter((id) => id.toString() !== userId.toString());
-		} else {
-			post.likes.push(userId);
-			if (post.author.toString() !== userId.toString()) {
-				const newNotification = new Notification({
-					recipient: post.author,
-					type: "like",
-					relatedUser: userId,
-					relatedPost: postId,
-				});
-
-				await newNotification.save();
-			}
+		const post = await Post.findById(postId).select("author likes").lean();
+		if (!post) {
+			return res.status(404).json({ message: "Post not found" });
 		}
 
-		await post.save();
+		const alreadyLiked = post.likes.some((id) => id.toString() === userId.toString());
+		const update = alreadyLiked
+			? { $pull: { likes: userId } }
+			: { $addToSet: { likes: userId } };
+		const updatedPost = await Post.findByIdAndUpdate(postId, update, { new: true });
 
-		res.status(200).json(post);
+		if (!alreadyLiked && post.author.toString() !== userId.toString()) {
+			const newNotification = new Notification({
+				recipient: post.author,
+				type: "like",
+				relatedUser: userId,
+				relatedPost: postId,
+			});
+
+			await newNotification.save();
+		}
+
+		if (!updatedPost) {
+			return res.status(404).json({ message: "Post not found" });
+		}
+
+		res.status(200).json(updatedPost);
 	} catch (error) {
 		console.error("Error in likePost controller:", error);
 		res.status(500).json({ message: "Server error" });
+	}
+};
+
+export const trackPostShare = async (req, res) => {
+	try {
+		const postId = req.params.id;
+		const updated = await Post.findByIdAndUpdate(postId, { $inc: { shareCount: 1 } }, { new: true })
+			.select("shareCount");
+		if (!updated) {
+			return res.status(404).json({ message: "Post not found" });
+		}
+		return res.status(200).json({ shareCount: updated.shareCount || 0 });
+	} catch (error) {
+		console.error("Error in trackPostShare controller:", error);
+		return res.status(500).json({ message: "Server error" });
 	}
 };
 

@@ -1,5 +1,25 @@
 import mongoose from "mongoose";
 
+const NOTIFICATION_TYPES = [
+	"like",
+	"comment",
+	"connectionAccepted",
+	"message",
+	"applicationSubmitted",
+	"applicationStatusUpdated",
+	"targetedJob",
+];
+
+const TYPE_REQUIREMENTS = {
+	like: ["relatedUser", "relatedPost"],
+	comment: ["relatedUser", "relatedPost"],
+	connectionAccepted: ["relatedUser"],
+	message: ["relatedUser", "relatedMessage"],
+	applicationSubmitted: ["relatedUser", "relatedJob", "relatedApplication"],
+	applicationStatusUpdated: ["relatedUser", "relatedJob", "relatedApplication"],
+	targetedJob: ["relatedUser", "relatedJob"],
+};
+
 const notificationSchema = new mongoose.Schema(
 	{
 		recipient: {
@@ -10,15 +30,7 @@ const notificationSchema = new mongoose.Schema(
 		type: {
 			type: String,
 			required: true,
-			enum: [
-				"like",
-				"comment",
-				"connectionAccepted",
-				"message",
-				"applicationSubmitted",
-				"applicationStatusUpdated",
-				"targetedJob",
-			],
+			enum: NOTIFICATION_TYPES,
 		},
 		relatedUser: {
 			type: mongoose.Schema.Types.ObjectId,
@@ -51,6 +63,34 @@ const notificationSchema = new mongoose.Schema(
 	},
 	{ timestamps: true }
 );
+
+notificationSchema.pre("validate", function enforceNotificationStructure(next) {
+	const requiredFields = TYPE_REQUIREMENTS[this.type] || [];
+
+	for (const field of requiredFields) {
+		if (!this[field]) {
+			this.invalidate(
+				field,
+				`${field} is required for ${this.type} notifications`,
+			);
+		}
+	}
+
+	if (
+		this.type === "applicationStatusUpdated" &&
+		!String(this.metadata?.status || "").trim()
+	) {
+		this.invalidate(
+			"metadata.status",
+			"metadata.status is required for applicationStatusUpdated notifications",
+		);
+	}
+
+	next();
+});
+
+notificationSchema.index({ recipient: 1, createdAt: -1 });
+notificationSchema.index({ recipient: 1, read: 1, createdAt: -1 });
 
 const Notification = mongoose.model("Notification", notificationSchema);
 

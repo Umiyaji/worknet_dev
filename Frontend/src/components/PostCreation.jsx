@@ -1,9 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
 import { FileText, Image, Loader, Sparkles, Wand2, X } from "lucide-react";
 import SmartImage from "./SmartImage";
+
+const getDraftStorageKey = (userId) => `worknet:postDraft:${userId || "guest"}`;
 
 const PostCreation = ({ user }) => {
 	const [content, setContent] = useState("");
@@ -13,8 +15,16 @@ const PostCreation = ({ user }) => {
 	const [aiPrompt, setAiPrompt] = useState("");
 	const [aiContextFile, setAiContextFile] = useState(null);
 	const [aiDraft, setAiDraft] = useState("");
+	const [mentionQuery, setMentionQuery] = useState("");
+	const [mentionStart, setMentionStart] = useState(-1);
+	const [mentionSuggestions, setMentionSuggestions] = useState([]);
+	const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
+	const [highlightedMentionIndex, setHighlightedMentionIndex] = useState(0);
+	const textareaRef = useRef(null);
+	const suggestionsRef = useRef(null);
 
 	const queryClient = useQueryClient();
+	const draftKey = getDraftStorageKey(user?._id);
 
 	const { mutate: createPostMutation, isLoading } = useMutation({
 		mutationFn: async (postData) => {
@@ -132,6 +142,11 @@ const PostCreation = ({ user }) => {
 		setContent("");
 		setImage(null);
 		setImagePreview(null);
+		try {
+			window.localStorage.removeItem(draftKey);
+		} catch {
+			// ignore
+		}
 	};
 
 	const handleImageChange = (e) => {
@@ -155,9 +170,156 @@ const PostCreation = ({ user }) => {
 		});
 	};
 
+	const updateMentionState = (nextValue, cursorPosition) => {
+		if (typeof cursorPosition !== "number") {
+			setShowMentionSuggestions(false);
+			setMentionQuery("");
+			setMentionStart(-1);
+			return;
+		}
+
+		const head = nextValue.slice(0, cursorPosition);
+		const atIndex = head.lastIndexOf("@");
+		if (atIndex === -1) {
+			setShowMentionSuggestions(false);
+			setMentionQuery("");
+			setMentionStart(-1);
+			return;
+		}
+
+		const charBeforeAt = atIndex > 0 ? head[atIndex - 1] : "";
+		const startsMention = !charBeforeAt || /\s/.test(charBeforeAt);
+		if (!startsMention) {
+			setShowMentionSuggestions(false);
+			setMentionQuery("");
+			setMentionStart(-1);
+			return;
+		}
+
+		const rawQuery = head.slice(atIndex + 1);
+		if (!/^[a-zA-Z0-9_]*$/.test(rawQuery)) {
+			setShowMentionSuggestions(false);
+			setMentionQuery("");
+			setMentionStart(-1);
+			return;
+		}
+
+		setMentionStart(atIndex);
+		setMentionQuery(rawQuery);
+		setShowMentionSuggestions(true);
+		setHighlightedMentionIndex(0);
+	};
+
+	useEffect(() => {
+		if (!showMentionSuggestions) {
+			setMentionSuggestions([]);
+			return;
+		}
+
+		const q = mentionQuery.trim();
+		if (!q) {
+			setMentionSuggestions([]);
+			return;
+		}
+
+		const timer = window.setTimeout(async () => {
+			try {
+				const res = await axiosInstance.get(`/search?query=${encodeURIComponent(q)}`);
+				const users = Array.isArray(res.data) ? res.data : [];
+				setMentionSuggestions(users.slice(0, 6));
+			} catch {
+				setMentionSuggestions([]);
+			}
+		}, 180);
+
+		return () => window.clearTimeout(timer);
+	}, [mentionQuery, showMentionSuggestions]);
+
+	useEffect(() => {
+		const handleDocumentClick = (event) => {
+			const textareaNode = textareaRef.current;
+			const suggestionsNode = suggestionsRef.current;
+			if (
+				textareaNode &&
+				textareaNode.contains(event.target)
+			) {
+				return;
+			}
+			if (
+				suggestionsNode &&
+				suggestionsNode.contains(event.target)
+			) {
+				return;
+			}
+			setShowMentionSuggestions(false);
+		};
+
+		document.addEventListener("mousedown", handleDocumentClick);
+		return () => document.removeEventListener("mousedown", handleDocumentClick);
+	}, []);
+
+	const insertMention = (username) => {
+		const input = textareaRef.current;
+		if (!input || mentionStart < 0) return;
+
+		const cursor = input.selectionStart ?? content.length;
+		const before = content.slice(0, mentionStart);
+		const after = content.slice(cursor);
+		const nextValue = `${before}@${username} ${after}`;
+		setContent(nextValue);
+		setShowMentionSuggestions(false);
+		setMentionQuery("");
+		setMentionStart(-1);
+
+		window.requestAnimationFrame(() => {
+			const nextCursor = before.length + username.length + 2;
+			input.focus();
+			input.setSelectionRange(nextCursor, nextCursor);
+		});
+	};
+
+	useEffect(() => {
+		try {
+			const saved = window.localStorage.getItem(draftKey);
+			if (saved) {
+				const parsed = JSON.parse(saved);
+				if (parsed?.content && !content) {
+					setContent(parsed.content);
+					toast.success("Restored your saved draft");
+				}
+			}
+		} catch {
+			// ignore localStorage parse issues
+		}
+		// run once per user switch
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [draftKey]);
+
+	useEffect(() => {
+		const timer = window.setTimeout(() => {
+			try {
+				if (!content.trim()) {
+					window.localStorage.removeItem(draftKey);
+					return;
+				}
+				window.localStorage.setItem(
+					draftKey,
+					JSON.stringify({
+						content,
+						updatedAt: Date.now(),
+					}),
+				);
+			} catch {
+				// ignore localStorage write errors
+			}
+		}, 350);
+
+		return () => window.clearTimeout(timer);
+	}, [content, draftKey]);
+
 	return (
 		<div className="bg-secondary rounded-lg shadow mb-2 md:mb-4 lg:mb-4 p-4">
-			<div className="flex space-x-3">
+			<div className="relative flex space-x-3">
 				<SmartImage
 					src={
 						user?.role === "recruiter"
@@ -168,11 +330,69 @@ const PostCreation = ({ user }) => {
 					className="size-10 rounded-full hidden md:block lg:block"
 				/>
 				<textarea
+					ref={textareaRef}
 					placeholder="What's on your mind?"
 					className="w-full p-2 rounded-lg bg-base-100 hover:bg-base-200 focus:bg-base-200 focus:outline-none resize-none transition-colors duration-200 h-[250px] md:h-[100px] lg:h-[100px]"
 					value={content}
-					onChange={(e) => setContent(e.target.value)}
+					onChange={(e) => {
+						const nextValue = e.target.value;
+						setContent(nextValue);
+						updateMentionState(nextValue, e.target.selectionStart);
+					}}
+					onClick={(e) => updateMentionState(e.currentTarget.value, e.currentTarget.selectionStart)}
+					onKeyDown={(e) => {
+						if (!showMentionSuggestions || !mentionSuggestions.length) return;
+
+						if (e.key === "ArrowDown") {
+							e.preventDefault();
+							setHighlightedMentionIndex((prev) =>
+								Math.min(prev + 1, mentionSuggestions.length - 1)
+							);
+						} else if (e.key === "ArrowUp") {
+							e.preventDefault();
+							setHighlightedMentionIndex((prev) => Math.max(prev - 1, 0));
+						} else if (e.key === "Enter") {
+							e.preventDefault();
+							const selected = mentionSuggestions[highlightedMentionIndex];
+							if (selected?.username) {
+								insertMention(selected.username);
+							}
+						} else if (e.key === "Escape") {
+							setShowMentionSuggestions(false);
+						}
+					}}
 				/>
+
+				{showMentionSuggestions && mentionSuggestions.length > 0 ? (
+					<div
+						ref={suggestionsRef}
+						className="absolute left-0 right-0 top-full z-20 mt-2 rounded-xl border border-slate-200 bg-white shadow-lg md:left-[52px]"
+					>
+						{mentionSuggestions.map((candidate, index) => (
+							<button
+								key={candidate._id || candidate.username || index}
+								type="button"
+								onMouseDown={(e) => e.preventDefault()}
+								onClick={() => insertMention(candidate.username)}
+								className={`flex w-full items-center gap-3 px-3 py-2 text-left transition ${
+									index === highlightedMentionIndex ? "bg-slate-100" : "hover:bg-slate-50"
+								}`}
+							>
+								<SmartImage
+									src={candidate.profilePicture || "/avatar.png"}
+									alt={candidate.name || candidate.username}
+									className="size-8 rounded-full"
+								/>
+								<div className="min-w-0">
+									<p className="truncate text-sm font-medium text-slate-900">
+										{candidate.name || candidate.username}
+									</p>
+									<p className="truncate text-xs text-slate-500">@{candidate.username}</p>
+								</div>
+							</button>
+						))}
+					</div>
+				) : null}
 			</div>
 
 			{imagePreview && (
@@ -202,6 +422,23 @@ const PostCreation = ({ user }) => {
 						<Sparkles size={18} className="mr-2" />
 						<span>AI Assist</span>
 					</button>
+					{content.trim() ? (
+						<button
+							type="button"
+							onClick={() => {
+								setContent("");
+								try {
+									window.localStorage.removeItem(draftKey);
+								} catch {
+									// ignore
+								}
+								toast.success("Draft cleared");
+							}}
+							className="text-xs text-slate-500 hover:text-slate-700"
+						>
+							Clear draft
+						</button>
+					) : null}
 				</div>
 
 				<button

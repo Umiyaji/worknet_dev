@@ -166,6 +166,11 @@ const JobDetailPage = () => {
           <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5">
             <Building2 size={16} /> {job.experienceRequired}
           </span>
+          {typeof job.matchScore === "number" ? (
+            <span className="inline-flex items-center gap-2 rounded-full bg-blue-500/30 px-3 py-1.5 text-blue-100">
+              Match Score: {job.matchScore}%
+            </span>
+          ) : null}
         </div>
         <p className="mt-4 text-sm text-slate-300">
           Last date: {new Date(job.lastDateToApply).toLocaleDateString()}

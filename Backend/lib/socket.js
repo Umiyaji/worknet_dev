@@ -22,7 +22,7 @@ const emitOnlineUsers = () => {
 		return;
 	}
 
-	io.emit("users:online", Array.from(onlineUsers.keys()));
+	io.volatile.emit("users:online", Array.from(onlineUsers.keys()));
 };
 
 export const createSocketServer = (app) => {
@@ -33,6 +33,13 @@ export const createSocketServer = (app) => {
 			origin: process.env.CLIENT_URL,
 			credentials: true,
 		},
+		connectionStateRecovery: {
+			maxDisconnectionDuration: Number(process.env.SOCKET_RECOVERY_MS || 120000),
+			skipMiddlewares: false,
+		},
+		maxHttpBufferSize: Number(process.env.SOCKET_MAX_BUFFER_BYTES || 1_000_000),
+		pingInterval: Number(process.env.SOCKET_PING_INTERVAL_MS || 25000),
+		pingTimeout: Number(process.env.SOCKET_PING_TIMEOUT_MS || 20000),
 	});
 
 	io.use(async (socket, next) => {
@@ -45,7 +52,7 @@ export const createSocketServer = (app) => {
 			}
 
 			const decoded = jwt.verify(token, process.env.JWT_SECRET);
-			const user = await User.findById(decoded.userId).select("-password");
+			const user = await User.findById(decoded.userId).select("-password").lean();
 
 			if (!user) {
 				return next(new Error("Unauthorized"));

@@ -4,6 +4,7 @@ import {
 	acceptConnectionRequest,
 	getConnectionRequests,
 	getConnectionStatus,
+	getMutualConnections,
 	getUserConnections,
 	rejectConnectionRequest,
 	removeConnection,
@@ -19,5 +20,6 @@ router.get("/requests", protectRoute, getConnectionRequests);
 router.get("/", protectRoute, getUserConnections);
 router.delete("/:userId", protectRoute, removeConnection);
 router.get("/status/:userId", protectRoute, getConnectionStatus);
+router.get("/mutual/:userId", protectRoute, getMutualConnections);
 
 export default router;

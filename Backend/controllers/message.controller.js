@@ -3,12 +3,21 @@ import cloudinary from "../lib/cloudinary.js";
 import { emitToUser, getOnlineUsers } from "../lib/socket.js";
 import Message from "../models/message.model.js";
 import User from "../models/user.model.js";
+import { getPagination } from "../lib/pagination.js";
 
 const conversationPopulate = "name username profilePicture headline";
 
 const buildConversationSummary = (message, currentUserId) => {
+	if (!message?.sender?._id || !message?.recipient?._id) {
+		return null;
+	}
+
 	const isSender = message.sender._id.toString() === currentUserId.toString();
 	const otherUser = isSender ? message.recipient : message.sender;
+
+	if (!otherUser?._id) {
+		return null;
+	}
 
 	return {
 		_id: otherUser._id,
@@ -39,6 +48,7 @@ const getTimestampValue = (value) => {
 export const getConversations = async (req, res) => {
 	try {
 		const currentUserId = req.user._id;
+		const { limit } = getPagination(req.query, { defaultLimit: 100, maxLimit: 200 });
 
 		const recentMessages = await Message.aggregate([
 			{
@@ -60,12 +70,13 @@ export const getConversations = async (req, res) => {
 					messageId: { $first: "$_id" },
 				},
 			},
+			{ $limit: limit },
 		]);
 
 		const userWithConnections = await User.findById(currentUserId).populate(
 			"connections",
 			conversationPopulate
-		);
+		).lean();
 		const unreadCounts = await Message.aggregate([
 			{
 				$match: {
@@ -91,10 +102,14 @@ export const getConversations = async (req, res) => {
 			const messages = await Message.find({ _id: { $in: messageIds } })
 				.populate("sender", conversationPopulate)
 				.populate("recipient", conversationPopulate)
-				.sort({ createdAt: -1 });
+				.sort({ createdAt: -1 })
+				.lean();
 
 			messages.forEach((message) => {
 				const conversation = buildConversationSummary(message, currentUserId);
+				if (!conversation) {
+					return;
+				}
 				conversation.unreadCount = unreadCountMap.get(conversation._id.toString()) || 0;
 				conversationsByUserId.set(conversation._id.toString(), conversation);
 			});
@@ -133,7 +148,7 @@ export const getMessagesWithUser = async (req, res) => {
 			return res.status(400).json({ message: "Invalid user id" });
 		}
 
-		const otherUser = await User.findById(userId).select(conversationPopulate);
+		const otherUser = await User.findById(userId).select(conversationPopulate).lean();
 		if (!otherUser) {
 			return res.status(404).json({ message: "User not found" });
 		}
@@ -149,6 +164,7 @@ export const getMessagesWithUser = async (req, res) => {
 			}
 		);
 
+		const { limit, skip } = getPagination(req.query, { defaultLimit: 50, maxLimit: 100 });
 		const messages = await Message.find({
 			$or: [
 				{ sender: currentUserId, recipient: userId },
@@ -157,11 +173,14 @@ export const getMessagesWithUser = async (req, res) => {
 		})
 			.populate("sender", conversationPopulate)
 			.populate("recipient", conversationPopulate)
-			.sort({ createdAt: 1 });
+			.sort({ createdAt: -1 })
+			.skip(skip)
+			.limit(limit)
+			.lean();
 
 		res.json({
 			user: otherUser,
-			messages,
+			messages: messages.reverse(),
 			onlineUsers: getOnlineUsers(),
 		});
 	} catch (error) {

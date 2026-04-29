@@ -16,6 +16,7 @@ import {
 	sendMessageToApplicant,
 	updateJob,
 	updateApplicationNotes,
+	updateApplicationPipelineMeta,
 	updateApplicationStatus,
 	uploadExcelPreview,
 } from "../controllers/job.controller.js";
@@ -39,6 +40,7 @@ router.get("/:jobId/applicants", protectRoute, requireRecruiter, getApplicantsFo
 router.get("/:jobId/applicants/:applicationId", protectRoute, requireRecruiter, getApplicationDetails);
 router.put("/:jobId/applicants/:applicationId/status", protectRoute, requireRecruiter, updateApplicationStatus);
 router.put("/:jobId/applicants/:applicationId/notes", protectRoute, requireRecruiter, updateApplicationNotes);
+router.put("/:jobId/applicants/:applicationId/pipeline", protectRoute, requireRecruiter, updateApplicationPipelineMeta);
 router.post("/:jobId/applicants/:applicationId/message", protectRoute, requireRecruiter, sendMessageToApplicant);
 
 export default router;

@@ -60,7 +60,7 @@ const SignUpForm = ({ defaultRecruiter = false }) => {
   const otp = otpDigits.join("");
 
   useEffect(() => {
-    if (!otpCountdown) {
+    if (!otpCountdown || isEmailVerified) {
       return undefined;
     }
 
@@ -75,7 +75,7 @@ const SignUpForm = ({ defaultRecruiter = false }) => {
     }, 1000);
 
     return () => window.clearInterval(intervalId);
-  }, [otpCountdown]);
+  }, [otpCountdown, isEmailVerified]);
 
   const { mutate: signUpMutation, isPending } = useMutation({
     mutationFn: async (data) => {
@@ -125,6 +125,7 @@ const SignUpForm = ({ defaultRecruiter = false }) => {
     },
     onSuccess: (data) => {
       setIsEmailVerified(true);
+      setOtpCountdown(0);
       toast.success(data?.message || "Email verified successfully");
     },
     onError: (err) => {

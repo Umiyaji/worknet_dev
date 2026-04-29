@@ -1,6 +1,10 @@
 import ConnectionRequest from "../models/connectionRequest.model.js";
 import Notification from "../models/notification.model.js";
 import User from "../models/user.model.js";
+import { getPagination } from "../lib/pagination.js";
+
+const hasConnection = (user, userId) =>
+	(user?.connections || []).some((connectionId) => connectionId.toString() === userId.toString());
 
 export const sendConnectionRequest = async (req, res) => {
 	try {
@@ -11,7 +15,7 @@ export const sendConnectionRequest = async (req, res) => {
 			return res.status(400).json({ message: "You can't send a request to yourself" });
 		}
 
-		if (req.user.connections.includes(userId)) {
+		if (hasConnection(req.user, userId)) {
 			return res.status(400).json({ message: "You are already connected" });
 		}
 
@@ -19,7 +23,7 @@ export const sendConnectionRequest = async (req, res) => {
 			sender: senderId,
 			recipient: userId,
 			status: "pending",
-		});
+		}).lean();
 
 		if (existingRequest) {
 			return res.status(400).json({ message: "A connection request already exists" });
@@ -85,6 +89,9 @@ export const rejectConnectionRequest = async (req, res) => {
 		const userId = req.user._id;
 
 		const request = await ConnectionRequest.findById(requestId);
+		if (!request) {
+			return res.status(404).json({ message: "Connection request not found" });
+		}
 
 		if (request.recipient.toString() !== userId.toString()) {
 			return res.status(403).json({ message: "Not authorized to reject this request" });
@@ -107,11 +114,16 @@ export const rejectConnectionRequest = async (req, res) => {
 export const getConnectionRequests = async (req, res) => {
 	try {
 		const userId = req.user._id;
+		const { limit, skip } = getPagination(req.query, { defaultLimit: 50, maxLimit: 100 });
 
 		const requests = await ConnectionRequest.find({ recipient: userId, status: "pending" }).populate(
 			"sender",
 			"name username profilePicture headline connections"
-		);
+		)
+			.sort({ createdAt: -1 })
+			.skip(skip)
+			.limit(limit)
+			.lean();
 
 		res.json(requests);
 	} catch (error) {
@@ -127,7 +139,7 @@ export const getUserConnections = async (req, res) => {
 		const user = await User.findById(userId).populate(
 			"connections",
 			"name username profilePicture headline connections"
-		);
+		).lean();
 
 		res.json(user.connections);
 	} catch (error) {
@@ -157,7 +169,7 @@ export const getConnectionStatus = async (req, res) => {
 		const currentUserId = req.user._id;
 
 		const currentUser = req.user;
-		if (currentUser.connections.includes(targetUserId)) {
+		if (hasConnection(currentUser, targetUserId)) {
 			return res.json({ status: "connected" });
 		}
 
@@ -180,5 +192,35 @@ export const getConnectionStatus = async (req, res) => {
 	} catch (error) {
 		console.error("Error in getConnectionStatus controller:", error);
 		res.status(500).json({ message: "Server error" });
+	}
+};
+
+export const getMutualConnections = async (req, res) => {
+	try {
+		const { userId } = req.params;
+		const currentUserId = req.user._id;
+
+		if (currentUserId.toString() === userId) {
+			return res.json({ mutualCount: 0 });
+		}
+
+		const [currentUser, targetUser] = await Promise.all([
+			User.findById(currentUserId).select("connections").lean(),
+			User.findById(userId).select("connections").lean(),
+		]);
+
+		if (!targetUser) {
+			return res.status(404).json({ message: "User not found" });
+		}
+
+		const currentSet = new Set((currentUser?.connections || []).map((id) => id.toString()));
+		const mutualCount = (targetUser?.connections || []).reduce((count, id) => {
+			return currentSet.has(id.toString()) ? count + 1 : count;
+		}, 0);
+
+		return res.json({ mutualCount });
+	} catch (error) {
+		console.error("Error in getMutualConnections controller:", error);
+		return res.status(500).json({ message: "Server error" });
 	}
 };

@@ -19,6 +19,13 @@ const RecruiterDashboardPage = () => {
       return res.data;
     },
   });
+  const { data: analytics } = useQuery({
+    queryKey: ["recruiterAnalytics"],
+    queryFn: async () => {
+      const res = await axiosInstance.get("/recruiter/analytics");
+      return res.data;
+    },
+  });
 
   if (isLoading) {
     return (
@@ -52,6 +59,25 @@ const RecruiterDashboardPage = () => {
         <div className="rounded-2xl bg-white border border-slate-200 p-5">
           <p className="text-sm text-slate-500">Total Applicants</p>
           <p className="text-3xl font-bold text-slate-900 mt-1">{data.totalApplicants}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-2xl bg-white border border-slate-200 p-5">
+          <p className="text-sm text-slate-500">Job Views (Reach)</p>
+          <p className="text-3xl font-bold text-slate-900 mt-1">{analytics?.jobViews || 0}</p>
+        </div>
+        <div className="rounded-2xl bg-white border border-slate-200 p-5">
+          <p className="text-sm text-slate-500">Conversion Rate</p>
+          <p className="text-3xl font-bold text-slate-900 mt-1">
+            {`${Math.round((analytics?.conversionRate || 0) * 100)}%`}
+          </p>
+        </div>
+        <div className="rounded-2xl bg-white border border-slate-200 p-5">
+          <p className="text-sm text-slate-500">Avg Job Conversion</p>
+          <p className="text-3xl font-bold text-slate-900 mt-1">
+            {`${Math.round((data?.averageJobConversionRate || 0) * 100)}%`}
+          </p>
         </div>
       </div>
 

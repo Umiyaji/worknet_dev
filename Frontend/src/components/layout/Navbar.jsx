@@ -1,43 +1,49 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { axiosInstance } from "../../lib/axios";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   Bell,
-  Home,
-  LogOut,
-  Search,
-  User,
-  Users,
-  SquarePlus,
+  BriefcaseBusiness,
   Building2,
   ClipboardList,
+  Home,
+  LogOut,
+  Menu,
+  MessageSquare,
+  Search,
+  SquarePlus,
+  User,
+  Users,
+  X,
 } from "lucide-react";
-import WorkOutlineIcon from "@mui/icons-material/WorkOutline";
-import ChatBubbleOutlineOutlinedIcon from "@mui/icons-material/ChatBubbleOutlineOutlined";
 import { connectSocket, disconnectSocket } from "../../lib/socket";
 import SmartImage from "../SmartImage";
+
+const getBadgeCount = (count) => {
+  if (!count) return "";
+  return count > 9 ? "9+" : String(count);
+};
 
 const Navbar = () => {
   const location = useLocation();
   const navigate = useNavigate();
-
   const queryClient = useQueryClient();
-  // AuthUser
   const authUser = queryClient.getQueryData(["authUser"]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const [isSearchActive, setIsSearchActive] = useState(false);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const searchWrapperRef = useRef(null);
+  const searchContainerRef = useRef(null);
   const searchInputRef = useRef(null);
-  const dropdownRef = useRef(null);
+  const profileMenuRef = useRef(null);
+  const mobileMenuRef = useRef(null);
 
-  // Notifications
   const { data: notifications } = useQuery({
     queryKey: ["notifications"],
     queryFn: async () => axiosInstance.get("/notifications"),
@@ -59,7 +65,6 @@ const Navbar = () => {
     enabled: !!authUser,
   });
 
-  // Logout mutation
   const { mutate: logout } = useMutation({
     mutationFn: () => axiosInstance.post("/auth/logout"),
     onSuccess: () => {
@@ -73,18 +78,6 @@ const Navbar = () => {
     },
   });
 
-  // Profile Dropdown
-  useEffect(() => {
-    function handleClickOutside(e) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setIsDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // Search query
   const { data: searchData, isFetching } = useQuery({
     queryKey: ["searchUsers", searchQuery],
     queryFn: async () => {
@@ -94,7 +87,6 @@ const Navbar = () => {
     },
     enabled: !!searchQuery.trim(),
     staleTime: 500,
-    cacheTime: 500,
   });
 
   useEffect(() => {
@@ -106,68 +98,199 @@ const Navbar = () => {
     }
   }, [searchData]);
 
-  // Close search on route change
   useEffect(() => {
-    setIsSearchActive(false);
+    setIsSearchOpen(false);
+    setIsMobileMenuOpen(false);
+    setIsProfileMenuOpen(false);
     setSearchQuery("");
     setHighlightedIndex(-1);
   }, [location.pathname]);
 
-  // Handle keyboard navigation
-  const handleKeyDown = (e) => {
-    if (searchResults.length > 0) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setHighlightedIndex((prev) =>
-          prev < searchResults.length - 1 ? prev + 1 : prev,
-        );
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : -1));
-      } else if (e.key === "Enter") {
-        if (highlightedIndex !== -1) {
-          const user = searchResults[highlightedIndex];
-          handleSearchResultClick(user.username);
+  useEffect(() => {
+    if (!isSearchOpen) {
+      return;
+    }
+
+    searchInputRef.current?.focus();
+  }, [isSearchOpen]);
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (
+        profileMenuRef.current &&
+        !profileMenuRef.current.contains(event.target)
+      ) {
+        setIsProfileMenuOpen(false);
+      }
+
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(event.target)
+      ) {
+        setHighlightedIndex(-1);
+        if (!searchQuery.trim()) {
+          setIsSearchOpen(false);
         }
       }
-    }
-  };
 
-  // Click search result
-  const handleSearchResultClick = (username) => {
-    setIsSearchActive(false);
-    setSearchQuery("");
-    setHighlightedIndex(-1);
-    navigate(`/profile/${username}`);
-  };
-
-  // Click outside to close
-  useEffect(() => {
-    const handleClickOutside = (event) => {
       if (
-        searchWrapperRef.current &&
-        !searchWrapperRef.current.contains(event.target) &&
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target)
+        mobileMenuRef.current &&
+        !mobileMenuRef.current.contains(event.target) &&
+        !event.target.closest("[data-mobile-menu-trigger='true']")
       ) {
-        setIsSearchActive(false);
-        setSearchQuery("");
-        setHighlightedIndex(-1);
+        setIsMobileMenuOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
-  const unreadNotificationCount = notifications?.data.filter(
-    (notif) => !notif.read,
-  ).length;
-  const unreadConnectionRequestsCount = connectionRequests?.data?.length;
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [searchQuery]);
+
+  const unreadNotificationCount =
+    notifications?.data?.filter((notif) => !notif.read).length || 0;
+  const unreadConnectionRequestsCount =
+    connectionRequests?.data?.length || 0;
   const unreadMessagesCount =
     conversations?.reduce(
       (total, conversation) => total + (conversation.unreadCount || 0),
       0,
     ) || 0;
+
+  const desktopNavItems = useMemo(() => {
+    const items = [
+      { to: "/", label: "Home", icon: Home },
+      {
+        to: "/network",
+        label: "Network",
+        icon: Users,
+        badge: unreadConnectionRequestsCount,
+      },
+      {
+        to: "/notifications",
+        label: "Notifications",
+        icon: Bell,
+        badge: unreadNotificationCount,
+      },
+      {
+        to: "/messages",
+        label: "Messages",
+        icon: MessageSquare,
+        badge: unreadMessagesCount,
+      },
+      { to: "/jobs", label: "Jobs", icon: BriefcaseBusiness },
+    ];
+
+    if (authUser?.role !== "recruiter") {
+      items.splice(3, 0, {
+        to: "/resume",
+        label: "Resume",
+        icon: ClipboardList,
+      });
+      items.push({
+        to: "/applications",
+        label: "Applications",
+        icon: ClipboardList,
+      });
+    }
+
+    if (authUser?.role === "recruiter") {
+      items.push({
+        to: "/recruiter/dashboard",
+        label: "Recruiter",
+        icon: Building2,
+      });
+    }
+
+    return items;
+  }, [
+    authUser?.role,
+    unreadConnectionRequestsCount,
+    unreadMessagesCount,
+    unreadNotificationCount,
+  ]);
+
+  const mobileNavItems = useMemo(() => {
+    const items = [
+      { to: "/", label: "Home", icon: Home },
+      {
+        to: "/network",
+        label: "Network",
+        icon: Users,
+        badge: unreadConnectionRequestsCount,
+      },
+      { to: "/create-post", label: "Post", icon: SquarePlus },
+      {
+        to: "/notifications",
+        label: "Alerts",
+        icon: Bell,
+        badge: unreadNotificationCount,
+      },
+      {
+        to:
+          authUser?.role === "recruiter"
+            ? "/recruiter/dashboard"
+            : `/profile/${authUser?.username}`,
+        label: authUser?.role === "recruiter" ? "Recruiter" : "Me",
+        icon: authUser?.role === "recruiter" ? Building2 : User,
+      },
+    ];
+
+    return items;
+  }, [
+    authUser?.role,
+    authUser?.username,
+    unreadConnectionRequestsCount,
+    unreadNotificationCount,
+  ]);
+
+  const quickLinks = useMemo(() => {
+    const links = [
+      { to: "/messages", label: "Messages", badge: unreadMessagesCount },
+      { to: "/jobs", label: "Jobs" },
+      { to: "/notifications", label: "Notifications", badge: unreadNotificationCount },
+    ];
+
+    if (authUser?.role !== "recruiter") {
+      links.unshift({ to: "/resume", label: "Resume" });
+      links.push({ to: "/applications", label: "Applications" });
+    } else {
+      links.push({ to: "/recruiter/dashboard", label: "Recruiter dashboard" });
+    }
+
+    return links;
+  }, [authUser?.role, unreadMessagesCount, unreadNotificationCount]);
+
+  const isPathActive = (path) => {
+    if (path === "/") return location.pathname === "/";
+    return location.pathname.startsWith(path);
+  };
+
+  const handleSearchResultClick = (username) => {
+    setIsSearchOpen(false);
+    setSearchQuery("");
+    setHighlightedIndex(-1);
+    navigate(`/profile/${username}`);
+  };
+
+  const handleKeyDown = (event) => {
+    if (!searchResults.length) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setHighlightedIndex((prev) =>
+        prev < searchResults.length - 1 ? prev + 1 : prev,
+      );
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : -1));
+    } else if (event.key === "Enter" && highlightedIndex !== -1) {
+      event.preventDefault();
+      handleSearchResultClick(searchResults[highlightedIndex].username);
+    } else if (event.key === "Escape") {
+      setIsSearchOpen(false);
+      setHighlightedIndex(-1);
+    }
+  };
 
   useEffect(() => {
     if (!authUser?._id) {
@@ -181,369 +304,424 @@ const Navbar = () => {
     };
   }, [authUser?._id, location.pathname]);
 
+  const searchPanel = authUser ? (
+    <div ref={searchContainerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setIsSearchOpen((prev) => !prev)}
+        className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 md:hidden"
+        aria-label="Open search"
+      >
+        {isSearchOpen ? <X size={18} /> : <Search size={18} />}
+      </button>
+
+      <div className="hidden md:block">
+        <div className="flex min-h-11 w-[320px] items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-slate-600 transition focus-within:border-cyan-300 focus-within:bg-white focus-within:shadow-sm lg:w-[360px]">
+          <Search size={16} className="text-slate-400" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder="Search people by name"
+            value={searchQuery}
+            onFocus={() => setIsSearchOpen(true)}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            onKeyDown={handleKeyDown}
+            className="w-full bg-transparent py-3 text-sm outline-none"
+          />
+        </div>
+      </div>
+
+      {isSearchOpen ? (
+        <>
+          <div className="fixed inset-0 z-30 bg-slate-950/25 backdrop-blur-[1px] md:hidden" />
+          <div className="absolute right-0 top-full z-40 mt-3 w-[calc(100vw-2rem)] max-w-[560px] overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.18)] md:left-0 md:right-auto md:w-full">
+            <div className="border-b border-slate-200 p-4 md:hidden">
+              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4">
+                <Search size={16} className="text-slate-400" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search people by name"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  onKeyDown={handleKeyDown}
+                  className="w-full bg-transparent py-3 text-sm outline-none"
+                />
+              </div>
+            </div>
+
+            {!searchQuery.trim() ? (
+              <div className="p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Search
+                </p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Find professionals by name and jump straight to their profile.
+                </p>
+              </div>
+            ) : (
+              <div className="max-h-80 overflow-y-auto">
+                {isFetching ? (
+                  <div className="px-5 py-4 text-sm text-slate-500">
+                    Searching...
+                  </div>
+                ) : searchResults.length ? (
+                  searchResults.map((user, index) => (
+                    <button
+                      key={user._id}
+                      type="button"
+                      onClick={() => handleSearchResultClick(user.username)}
+                      className={`flex w-full items-center gap-3 px-5 py-3 text-left transition ${
+                        index === highlightedIndex
+                          ? "bg-slate-100"
+                          : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <SmartImage
+                        src={user.profilePicture || "/avatar.png"}
+                        alt={user.name}
+                        className="h-10 w-10 rounded-2xl object-cover ring-1 ring-slate-200"
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-900">
+                          {user.name}
+                        </p>
+                        <p className="truncate text-xs text-slate-500">
+                          @{user.username}
+                        </p>
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-5 py-4 text-sm text-slate-500">
+                    No results found
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      ) : null}
+    </div>
+  ) : null;
+
   return (
     <>
-      {/* Overlay Search */}
-      {isSearchActive && (
-        <div
-          className="fixed inset-0 bg-black/50 z-20 transition-opacity duration-200"
-          onClick={() => setIsSearchActive(false)}
-        />
-      )}
+      <nav className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3 px-4 py-3 md:px-5 lg:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            {authUser ? (
+              <button
+                type="button"
+                data-mobile-menu-trigger="true"
+                onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 md:hidden"
+                aria-label="Open navigation menu"
+              >
+                <Menu size={18} />
+              </button>
+            ) : null}
 
-      {/* Navbar */}
-      <nav className="bg-secondary shadow-md sticky top-0 z-40 md:px-4">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex justify-between items-center py-2">
-            <div className="flex items-center justify-center gap-4">
-              <Link to="/">
-                <img
-                  className="h-10 w-10 object-contain"
-                  src="/favicon-logo1.png"
-                  alt="Worknet"
+            <Link
+              to="/"
+              className="flex min-w-0 items-center gap-3 rounded-2xl px-1 transition hover:opacity-90"
+            >
+              <img
+                className="h-10 w-10 rounded-2xl object-contain"
+                src="/favicon-logo1.png"
+                alt="Worknet"
+              />
+              <div className="hidden min-w-0 2xl:block">
+                <p className="truncate text-sm font-semibold tracking-tight text-slate-900">
+                  Worknet
+                </p>
+                <p className="truncate text-xs text-slate-500">
+                  Professional network
+                </p>
+              </div>
+            </Link>
+          </div>
+
+          <div className="mx-2 hidden min-w-0 flex-1 justify-center md:flex lg:max-w-[320px] xl:max-w-[360px] 2xl:max-w-[420px]">
+            {searchPanel}
+          </div>
+
+          <div className="hidden shrink-0 items-center gap-2 xl:flex">
+            {authUser ? (
+              <>
+                <div className="no-scrollbar flex max-w-[720px] items-center gap-1 overflow-x-auto rounded-[22px] border border-slate-200 bg-white px-2 py-1 shadow-sm 2xl:max-w-[860px]">
+                  {desktopNavItems.map((item) => {
+                    const Icon = item.icon;
+                    const active = isPathActive(item.to);
+
+                    return (
+                      <Link
+                        key={item.to}
+                        to={item.to}
+                        className={`relative inline-flex shrink-0 items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium transition ${
+                          active
+                            ? "bg-slate-900 text-white"
+                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        }`}
+                      >
+                        <Icon size={16} />
+                        <span>{item.label}</span>
+                        {item.badge ? (
+                          <span
+                            className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                              active
+                                ? "bg-white/20 text-white"
+                                : "bg-red-600 text-white"
+                            }`}
+                          >
+                            {getBadgeCount(item.badge)}
+                          </span>
+                        ) : null}
+                      </Link>
+                    );
+                  })}
+                </div>
+
+                <div ref={profileMenuRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsProfileMenuOpen((prev) => !prev)}
+                    className="inline-flex items-center gap-3 rounded-[22px] border border-slate-200 bg-white px-3 py-2 shadow-sm transition hover:bg-slate-50"
+                  >
+                    <SmartImage
+                      src={
+                        authUser?.role === "recruiter"
+                          ? authUser?.companyLogo ||
+                            authUser?.profilePicture ||
+                            "/avatar.png"
+                          : authUser?.profilePicture || "/avatar.png"
+                      }
+                      alt={authUser?.name || "Profile"}
+                      className="h-9 w-9 rounded-2xl object-cover ring-1 ring-slate-200"
+                    />
+                    <div className="text-left">
+                      <p className="text-sm font-semibold text-slate-900">
+                        Me
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {authUser?.role === "recruiter" ? "Recruiter" : "Profile"}
+                      </p>
+                    </div>
+                  </button>
+
+                  {isProfileMenuOpen ? (
+                    <div className="absolute right-0 mt-3 w-64 overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
+                      <div className="border-b border-slate-200 px-4 py-4">
+                        <p className="text-sm font-semibold text-slate-900">
+                          {authUser?.name}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {authUser?.role === "recruiter"
+                            ? authUser?.companyName || "Recruiter account"
+                            : `@${authUser?.username}`}
+                        </p>
+                      </div>
+                      <div className="p-2">
+                        <Link
+                          to={
+                            authUser?.role === "recruiter"
+                              ? `/company/${authUser?.username}`
+                              : `/profile/${authUser?.username}`
+                          }
+                          onClick={() => setIsProfileMenuOpen(false)}
+                          className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm text-slate-700 transition hover:bg-slate-100"
+                        >
+                          <User size={16} />
+                          View profile
+                        </Link>
+                        {authUser?.role === "recruiter" ? (
+                          <Link
+                            to="/recruiter/dashboard"
+                            onClick={() => setIsProfileMenuOpen(false)}
+                            className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm text-slate-700 transition hover:bg-slate-100"
+                          >
+                            <Building2 size={16} />
+                            Recruiter dashboard
+                          </Link>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsProfileMenuOpen(false);
+                            logout();
+                          }}
+                          className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm text-slate-700 transition hover:bg-slate-100"
+                        >
+                          <LogOut size={16} />
+                          Sign out
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-3">
+                <Link
+                  to="/login"
+                  className="rounded-full border border-slate-300 px-5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  to="/signup"
+                  className="rounded-full bg-slate-900 px-5 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+                >
+                  Join now
+                </Link>
+              </div>
+            )}
+          </div>
+
+          {authUser ? (
+            <div className="flex items-center gap-2 xl:hidden">
+              <div className="md:hidden">{searchPanel}</div>
+              <Link
+                to="/notifications"
+                className="relative inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
+                aria-label="Notifications"
+              >
+                <Bell size={18} />
+                {unreadNotificationCount ? (
+                  <span className="absolute right-1 top-1 inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    {getBadgeCount(unreadNotificationCount)}
+                  </span>
+                ) : null}
+              </Link>
+              <Link
+                to={
+                  authUser?.role === "recruiter"
+                    ? "/recruiter/dashboard"
+                    : `/profile/${authUser?.username}`
+                }
+                className="inline-flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:bg-slate-50"
+                aria-label="Open profile"
+              >
+                <SmartImage
+                  src={
+                    authUser?.role === "recruiter"
+                      ? authUser?.companyLogo ||
+                        authUser?.profilePicture ||
+                        "/avatar.png"
+                      : authUser?.profilePicture || "/avatar.png"
+                  }
+                  alt={authUser?.name || "Profile"}
+                  className="h-full w-full object-cover"
                 />
               </Link>
-
-              {/* Search */}
-              {authUser && (
-                <div
-                  ref={searchWrapperRef}
-                  onClick={() => {
-                    searchInputRef.current?.focus();
-                    setIsSearchActive(true);
-                  }}
-                  className="relative flex items-center h-8 w-[290px] md:w-[245px] lg:w-[245px]  border border-gray-400 py-1 px-4 rounded-full bg-white focus-within:bg-gray-200 focus-within:border-black focus-within:border-2 md:focus-within:w-[400px] lg:focus-within:w-[400px] cursor-text z-40"
-                >
-                  <Search size={16} />
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    placeholder="Search"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    className="ml-2 text-[16px] outline-none flex-1 bg-transparent"
-                  />
-
-                  {/* Dropdown */}
-                  {searchQuery.trim() && (
-                    <div
-                      ref={dropdownRef}
-                      className="absolute top-full left-0 mt-1 w-full bg-white shadow-lg rounded-md max-h-60 overflow-y-auto z-50"
-                    >
-                      {isFetching && (
-                        <div className="px-4 py-2 text-gray-500">
-                          Searching...
-                        </div>
-                      )}
-                      {!isFetching && searchResults.length === 0 && (
-                        <div className="px-4 py-2 text-gray-500">
-                          No results found
-                        </div>
-                      )}
-                      {searchResults.map((user, index) => (
-                        <div
-                          key={user._id}
-                          className={`flex items-center px-4 py-3 hover:bg-gray-100 transition-colors duration-100 cursor-pointer ${
-                            index === highlightedIndex ? "bg-gray-300" : ""
-                          }`}
-                          onClick={() => handleSearchResultClick(user.username)}
-                        >
-                          <div className="h-8 w-8 rounded-full mr-3 overflow-hidden bg-gray-200 flex items-center justify-center">
-                            <SmartImage
-                              src={user.profilePicture || "/avatar.png"}
-                              alt={`${user.name}'s avatar`}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium text-gray-800">
-                              {user.name}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
-
-            {/* Right Menu */}
-            <div className="flex items-center gap-2">
-              {authUser ? (
-                <>
-                  <div className=" md:flex lg:flex items-center gap-2 md:gap-6">
-                    <div className="hidden md:flex lg:flex items-center gap-2 md:gap-6">
-                      <Link
-                        to="/"
-                        className="text-neutral flex flex-col items-center"
-                      >
-                        <Home size={20} />
-                        <span className="text-xs hidden md:block">Home</span>
-                      </Link>
-
-                      <Link
-                        to="/network"
-                        className="text-neutral flex flex-col items-center relative"
-                      >
-                        <Users size={20} />
-                        <span className="text-xs hidden md:block">
-                          My Network
-                        </span>
-                        {unreadConnectionRequestsCount > 0 && (
-                          <span className="absolute -top-1 -right-1 md:right-4 bg-red-700 text-white text-xs rounded-full size-3 md:size-4 flex items-center justify-center">
-                            {unreadConnectionRequestsCount}
-                          </span>
-                        )}
-                      </Link>
-
-                      <Link
-                        to="/notifications"
-                        className="text-neutral flex flex-col items-center relative"
-                      >
-                        <Bell size={20} />
-                        <span className="text-xs hidden md:block">
-                          Notifications
-                        </span>
-                        {unreadNotificationCount > 0 && (
-                          <span className="absolute -top-1 -right-1 md:right-4 bg-red-700 text-white text-xs rounded-full size-3 md:size-4 flex items-center justify-center">
-                            {unreadNotificationCount}
-                          </span>
-                        )}
-                      </Link>
-
-                      {authUser?.role !== "recruiter" && (
-                        <Link
-                          to="/Resume"
-                          className="text-neutral flex flex-col items-center relative"
-                        >
-                          <WorkOutlineIcon size={20} />
-                          <span className="text-xs hidden md:block">Resume</span>
-                        </Link>
-                      )}
-
-                      <Link
-                        to="/messages"
-                        className="text-neutral flex flex-col items-center relative"
-                      >
-                        <ChatBubbleOutlineOutlinedIcon size={20} />
-                        <span className="text-xs hidden md:block">
-                          Messages
-                        </span>
-                        {unreadMessagesCount > 0 && (
-                          <span className="absolute -top-1 -right-1 md:right-4 bg-red-700 text-white text-xs rounded-full size-3 md:size-4 flex items-center justify-center">
-                            {unreadMessagesCount}
-                          </span>
-                        )}
-                      </Link>
-
-                      <Link
-                        to="/jobs"
-                        className="text-neutral flex flex-col items-center relative"
-                      >
-                        <WorkOutlineIcon size={20} />
-                        <span className="text-xs hidden md:block">Jobs</span>
-                      </Link>
-
-                      {authUser?.role !== "recruiter" && (
-                        <Link
-                          to="/applications"
-                          className="text-neutral flex flex-col items-center relative"
-                        >
-                          <ClipboardList size={20} />
-                          <span className="text-xs hidden md:block">Applications</span>
-                        </Link>
-                      )}
-
-                      {authUser?.role === "recruiter" && (
-                        <Link
-                          to="/recruiter/dashboard"
-                          className="text-neutral flex flex-col items-center relative"
-                        >
-                          <Building2 size={20} />
-                          <span className="text-xs hidden md:block">
-                            Recruiter
-                          </span>
-                        </Link>
-                      )}
-                    </div>
-
-                    {/* {<Link
-											to={`/profile/${authUser.username}`}
-											className="text-neutral flex flex-col items-center"
-										>
-											<User size={20} />
-											<span className="text-xs hidden md:block">Me</span>
-										</Link>} */}
-
-                    {/* <button
-											className="flex items-center space-x-1 text-sm text-gray-600 hover:text-gray-800 cursor-pointer"
-											onClick={() => logout()}
-										>
-											<LogOut size={20} />
-											<span className="hidden md:inline">Sign out</span>
-										</button>
-
-										{/* Profile Picture */}
-                    <div className="relative " ref={dropdownRef}>
-                      <button
-                        onClick={() => setIsDropdownOpen((prev) => !prev)}
-                        className="focus:outline-none text-neutral flex flex-col items-center cursor-pointer"
-                      >
-                        <SmartImage
-                          src={
-                            authUser?.role === "recruiter"
-                              ? authUser?.companyLogo || authUser?.profilePicture || "/avatar.png"
-                              : authUser?.profilePicture || "/avatar.png"
-                          }
-                          alt={authUser?.name || "Profile"}
-                          className="size-8 md:size-[22px] lg:size-[22px] rounded-full object-cover border border-gray-300 hover:opacity-90 transition"
-                        />
-                        <span className="text-xs hidden md:block lg:block">
-                          Me
-                        </span>
-                      </button>
-
-                      {isDropdownOpen && (
-                        <div className="absolute right-0 mt-2 w-40 bg-white shadow-gray-900 shadow-2xl rounded-lg py-2 z-50">
-                          <Link
-                            to={`/profile/${authUser?.username}`}
-                            onClick={() => setIsDropdownOpen(false)}
-                            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-200"
-                          >
-                            <User size={16} className="mr-2" />
-                            Profile
-                          </Link>
-                          {authUser?.role === "recruiter" && (
-                            <Link
-                              to="/recruiter/dashboard"
-                              onClick={() => setIsDropdownOpen(false)}
-                              className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-200"
-                            >
-                              <Building2 size={16} className="mr-2" />
-                              Recruiter Dashboard
-                            </Link>
-                          )}
-                          <button
-                            // onClick={() => logout()}
-                            onClick={() => {
-                              setIsDropdownOpen(false);
-                              logout();
-                            }}
-                            className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-200 cursor-pointer"
-                          >
-                            <LogOut size={16} className="mr-2" />
-                            Sign out
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <Link
-                    to="/login"
-                    className="btn btn-ghost px-5 py-1 rounded-full border border-primary text-primary hover:bg-primary hover:text-white transition-colors duration-200 flex items-center"
-                  >
-                    Sign In
-                  </Link>
-                  <Link
-                    to="/signup"
-                    className="btn btn-primary px-5 py-1 rounded-full border border-primary text-primary hover:bg-primary hover:text-white transition-colors duration-200 flex items-center"
-                  >
-                    Join now
-                  </Link>
-                </>
-              )}
+          ) : (
+            <div className="flex items-center gap-2 lg:hidden">
+              <Link
+                to="/login"
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+              >
+                Sign In
+              </Link>
             </div>
-          </div>
+          )}
         </div>
       </nav>
 
-      {/* Mobile Bottom Menu */}
-      {authUser && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white shadow-inner border-none md:hidden z-50">
-          <div className="flex justify-around">
-            {/* Home */}
-            <Link
-              to="/"
-              className={`flex flex-col items-center border-none px-5 py-2 ${
-                location.pathname === "/"
-                  ? "text-blue-600 bg-gray-200"
-                  : "text-gray-600"
-              }`}
-            >
-              <Home size={22} />
-              <span className="text-[10px] mt-1">Home</span>
-            </Link>
+      {authUser && isMobileMenuOpen ? (
+        <>
+          <div className="fixed inset-0 z-40 bg-slate-950/30 md:hidden" />
+          <div
+            ref={mobileMenuRef}
+            className="fixed inset-x-4 top-20 z-50 rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.18)] md:hidden"
+          >
+            <div className="mb-4 flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
+              <SmartImage
+                src={
+                  authUser?.role === "recruiter"
+                    ? authUser?.companyLogo ||
+                      authUser?.profilePicture ||
+                      "/avatar.png"
+                    : authUser?.profilePicture || "/avatar.png"
+                }
+                alt={authUser?.name || "Profile"}
+                className="h-12 w-12 rounded-2xl object-cover ring-1 ring-slate-200"
+              />
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  {authUser?.name}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {authUser?.role === "recruiter"
+                    ? authUser?.companyName || "Recruiter account"
+                    : `@${authUser?.username}`}
+                </p>
+              </div>
+            </div>
 
-            {/* My Network */}
-            <Link
-              to="/network"
-              className={`flex flex-col items-center relative border-none px-5 py-2 ${
-                location.pathname.startsWith("/network")
-                  ? "text-blue-600 bg-gray-200"
-                  : "text-gray-600"
-              }`}
-            >
-              <Users size={22} />
-              <span className="text-[10px] mt-1">My Network</span>
-              {unreadConnectionRequestsCount > 0 && (
-                <span className="absolute top-1 right-8 bg-red-700 text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center">
-                  {unreadConnectionRequestsCount}
-                </span>
-              )}
-            </Link>
+            <div className="grid grid-cols-2 gap-2">
+              {quickLinks.map((link) => (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  <span>{link.label}</span>
+                  {link.badge ? (
+                    <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+                      {getBadgeCount(link.badge)}
+                    </span>
+                  ) : null}
+                </Link>
+              ))}
+            </div>
 
-            {/* Post Create */}
-            <Link
-              to="/create-post"
-              className={`flex flex-col items-center border-none px-5 py-2 ${
-                location.pathname === "/create-post"
-                  ? "text-blue-600 bg-gray-200"
-                  : "text-gray-600"
-              }`}
+            <button
+              type="button"
+              onClick={() => logout()}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
             >
-              <SquarePlus size={22} />
-              <span className="text-[10px] mt-1">Post</span>
-            </Link>
+              <LogOut size={16} />
+              Sign out
+            </button>
+          </div>
+        </>
+      ) : null}
 
-            {/* Notifications */}
-            <Link
-              to="/notifications"
-              className={`flex flex-col items-center relative border-none px-5 py-2 ${
-                location.pathname.startsWith("/notifications")
-                  ? "text-blue-600 bg-gray-200"
-                  : "text-gray-600"
-              }`}
-            >
-              <Bell size={22} />
-              <span className="text-[10px] mt-1">Notifications</span>
-              {unreadNotificationCount > 0 && (
-                <span className="absolute top-1 right-8 bg-red-700 text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center">
-                  {unreadNotificationCount}
-                </span>
-              )}
-            </Link>
+      {authUser ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/92 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur md:hidden">
+          <div className="grid grid-cols-5 px-2 py-2">
+            {mobileNavItems.map((item) => {
+              const Icon = item.icon;
+              const active = isPathActive(item.to);
 
-            {/* Profile */}
-            <Link
-              to={`/profile/${authUser?.username}`}
-              className={`flex flex-col items-center border-none px-5 py-2 ${
-                location.pathname.startsWith(`/profile/${authUser?.username}`)
-                  ? "text-blue-600 bg-gray-200"
-                  : "text-gray-600"
-              }`}
-            >
-              <User size={22} />
-              <span className="text-[10px] mt-1">Me</span>
-            </Link>
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={`relative flex flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-medium transition ${
+                    active
+                      ? "bg-slate-900 text-white"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  <Icon size={18} />
+                  <span>{item.label}</span>
+                  {item.badge ? (
+                    <span
+                      className={`absolute right-3 top-1 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                        active ? "bg-white/20 text-white" : "bg-red-600 text-white"
+                      }`}
+                    >
+                      {getBadgeCount(item.badge)}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
           </div>
         </div>
-      )}
+      ) : null}
     </>
   );
 };

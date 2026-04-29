@@ -1,8 +1,10 @@
 import User from "../models/user.model.js";
 import cloudinary from "../lib/cloudinary.js";
+import Post from "../models/post.model.js";
 import fs from "fs/promises";
 import path from "path";
 import { generateGeminiContent } from "../lib/gemini.js";
+import { getPagination } from "../lib/pagination.js";
 const CURRENT_TOKENS = new Set(["present", "current", "ongoing", "now", "till date", "today"]);
 
 const getMimeTypeFromExtension = (filePath = "") => {
@@ -84,6 +86,7 @@ const extractJsonFromText = (text) => {
 
 const normalizeString = (value) => (typeof value === "string" ? value.trim() : "");
 const normalizeTargetProfileString = (value) => normalizeString(value).toLowerCase();
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const normalizeSkills = (skills) => {
 	if (!Array.isArray(skills)) {
@@ -270,20 +273,25 @@ export const getSuggestedConnections = async (req, res) => {
 	try {
 		const currentUser = await User.findById(req.user._id).select("connections");
 
-		const limit = parseInt(req.query.limit, 10) || 0;
-
-		const query = User.find({
+		const { limit, skip } = getPagination(req.query, { defaultLimit: 20, maxLimit: 50 });
+		const includeTotal = String(req.query.includeTotal || "").toLowerCase() === "true";
+		const suggestionsFilter = {
 			_id: {
 				$ne: req.user._id,
 				$nin: currentUser.connections,
 			},
-		}).select("name username profilePicture headline");
+		};
 
-		if (limit > 0) {
-			query.limit(limit);
-		}
+		const query = User.find(suggestionsFilter).select("name username profilePicture headline")
+			.skip(skip)
+			.limit(limit)
+			.lean();
 
 		const suggestedUsers = await query;
+		if (includeTotal) {
+			const total = await User.countDocuments(suggestionsFilter);
+			return res.json({ users: suggestedUsers, total });
+		}
 
 		res.json(suggestedUsers);
 	} catch (error) {
@@ -300,10 +308,57 @@ export const getPublicProfile = async (req, res) => {
 			return res.status(404).json({ message: "User not found" });
 		}
 
+		if (req.user?._id?.toString() !== user._id.toString()) {
+			await User.updateOne({ _id: user._id }, { $inc: { profileViewsCount: 1 } });
+			user.profileViewsCount = (user.profileViewsCount || 0) + 1;
+		}
+
 		res.json(user);
 	} catch (error) {
 		console.error("Error in getPublicProfile controller:", error);
 		res.status(500).json({ message: "Server error" });
+	}
+};
+
+export const getMyAnalytics = async (req, res) => {
+	try {
+		const userId = req.user._id;
+		const [profile, postAgg] = await Promise.all([
+			User.findById(userId).select("profileViewsCount").lean(),
+			Post.aggregate([
+				{ $match: { author: userId } },
+				{
+					$project: {
+						viewCount: { $ifNull: ["$viewCount", 0] },
+						shareCount: { $ifNull: ["$shareCount", 0] },
+						likeCount: { $size: { $ifNull: ["$likes", []] } },
+						commentCount: { $size: { $ifNull: ["$comments", []] } },
+					},
+				},
+				{
+					$group: {
+						_id: null,
+						postReach: { $sum: "$viewCount" },
+						totalShares: { $sum: "$shareCount" },
+						totalLikes: { $sum: "$likeCount" },
+						totalComments: { $sum: "$commentCount" },
+						totalPosts: { $sum: 1 },
+					},
+				},
+			]),
+		]);
+
+		return res.json({
+			profileViews: profile?.profileViewsCount || 0,
+			postReach: postAgg[0]?.postReach || 0,
+			totalShares: postAgg[0]?.totalShares || 0,
+			totalLikes: postAgg[0]?.totalLikes || 0,
+			totalComments: postAgg[0]?.totalComments || 0,
+			totalPosts: postAgg[0]?.totalPosts || 0,
+		});
+	} catch (error) {
+		console.error("Error in getMyAnalytics controller:", error);
+		return res.status(500).json({ message: "Server error" });
 	}
 };
 
@@ -438,7 +493,7 @@ export const uploadResume = async (req, res) => {
 // Delete profile picture
 export const deleteProfilePicture = async (req, res) => {
 	try {
-		const user = await User.findById(req.user.id);
+		const user = await User.findById(req.user._id);
 		if (!user) return res.status(404).json({ message: "User not found" });
 
 		user.profilePicture = "";
@@ -454,7 +509,7 @@ export const deleteProfilePicture = async (req, res) => {
 // Delete banner image
 export const deleteBannerImage = async (req, res) => {
 	try {
-		const user = await User.findById(req.user.id);
+		const user = await User.findById(req.user._id);
 		if (!user) return res.status(404).json({ message: "User not found" });
 
 		user.bannerImg = "";
@@ -469,14 +524,14 @@ export const deleteBannerImage = async (req, res) => {
 
 export const deleteResume = async (req, res) => {
 	try {
-		const user = await User.findById(req.user.id);
+		const user = await User.findById(req.user._id);
 		if (!user) return res.status(404).json({ message: "User not found" });
 
 		await deleteLocalResumeIfExists(user.resume);
 		user.resume = "";
 		await user.save();
 
-		const updatedUser = await User.findById(req.user.id).select("-password");
+		const updatedUser = await User.findById(req.user._id).select("-password");
 		res.json(updatedUser);
 	} catch (error) {
 		console.error("Error deleting resume:", error);
@@ -493,15 +548,21 @@ export const searchUsers = async (req, res) => {
 		if (!query) {
 			return res.status(400).json({ message: "Search query is required." });
 		}
+		const normalizedQuery = normalizeString(query);
+		if (normalizedQuery.length < 2) {
+			return res.status(400).json({ message: "Search query must be at least 2 characters." });
+		}
+		const safeQuery = escapeRegex(normalizedQuery).slice(0, 64);
 
 		const users = await User.find({
 			$or: [
-				{ name: { $regex: query, $options: 'i' } },
-				{ username: { $regex: query, $options: 'i' } }
+				{ name: { $regex: safeQuery, $options: "i" } },
+				{ username: { $regex: safeQuery, $options: "i" } }
 			]
 		})
-			.select('name username profilePicture')
-			.limit(10);
+			.select("name username profilePicture")
+			.limit(10)
+			.lean();
 
 		res.status(200).json(users);
 	} catch (error) {

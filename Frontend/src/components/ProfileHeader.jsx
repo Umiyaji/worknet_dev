@@ -62,6 +62,11 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
       enabled: !isOwnProfile,
     },
   );
+  const { data: mutualConnections } = useQuery({
+    queryKey: ["mutualConnections", userData._id],
+    queryFn: () => axiosInstance.get(`/connections/mutual/${userData._id}`),
+    enabled: !isOwnProfile && Boolean(userData?._id),
+  });
 
   const isConnected = userData.connections.some((connection) => {
     if (!connection) return false;
@@ -338,7 +343,7 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
         };
 
         image.src = source;
-      } catch (_error) {
+      } catch {
         toast.error("Failed to prepare image for cropping");
       }
     };
@@ -387,7 +392,7 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
       }));
       onSave({ profilePicture: croppedImage });
       closeCropModal(true);
-    } catch (_error) {
+    } catch {
       toast.error("Failed to crop image");
     } finally {
       setIsSavingCroppedPhoto(false);
@@ -522,19 +527,19 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
   const cropPreviewHeight = cropModal.imageHeight * cropBaseScale * cropModal.zoom;
 
   return (
-    <div className="bg-white shadow rounded-lg mb-6">
+    <div className="mb-6 overflow-hidden rounded-[28px] border border-slate-200 bg-white/95 shadow-sm backdrop-blur">
       {/* Banner */}
       <div
-        className="relative h-48 rounded-t-lg bg-cover bg-center"
+        className="relative h-32 bg-cover bg-center sm:h-40 md:h-48"
         style={{
           backgroundImage: `url('${resolveImageUrl(editedData.bannerImg || userData.bannerImg || "/banner.png")}')`,
         }}
       >
         {isOwnProfile && (
-          <div className="absolute top-2 right-2 flex gap-2">
+          <div className="absolute right-3 top-3 flex gap-2">
             {/* Upload Banner */}
-            <label className="bg-white p-2 rounded-full shadow hover:bg-gray-200 cursor-pointer transition">
-              <Camera size={20} />
+            <label className="cursor-pointer rounded-full bg-white p-2 shadow transition hover:bg-gray-200">
+              <Camera size={18} />
               <input
                 type="file"
                 className="hidden"
@@ -549,9 +554,9 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
               <button
                 onClick={() => deleteBannerImage()}
                 disabled={deletingBanner}
-                className="bg-white p-2 rounded-full shadow cursor-pointer hover:bg-red-100 transition"
+                className="cursor-pointer rounded-full bg-white p-2 shadow transition hover:bg-red-100"
               >
-                <Trash2 size={20} className="text-red-600" />
+                <Trash2 size={18} className="text-red-600" />
               </button>
             )}
           </div>
@@ -559,10 +564,10 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
       </div>
 
       {/* Profile Picture */}
-      <div className="p-4">
-        <div className="relative -mt-20 mb-4 flex justify-center">
+      <div className="p-4 sm:p-5">
+        <div className="relative -mt-14 mb-4 flex justify-center sm:-mt-16 md:-mt-20">
           <SmartImage
-            className="w-32 h-32 rounded-full object-cover"
+            className="h-24 w-24 rounded-full border-4 border-white object-cover shadow-lg sm:h-28 sm:w-28 md:h-32 md:w-32"
             src={
               editedData.profilePicture ||
               userData.profilePicture ||
@@ -573,8 +578,8 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
           {isOwnProfile && (
             <>
               {/* Upload */}
-              <label className="absolute bottom-0 right-[calc(50%-4rem)] bg-white p-2 rounded-full shadow hover:bg-gray-200 cursor-pointer transition">
-                <Camera size={20} />
+              <label className="absolute bottom-0 right-[calc(50%-3.35rem)] cursor-pointer rounded-full bg-white p-2 shadow transition hover:bg-gray-200 sm:right-[calc(50%-3.8rem)] md:right-[calc(50%-4rem)]">
+                <Camera size={18} />
                 <input
                   type="file"
                   className="hidden"
@@ -588,9 +593,9 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
                 <button
                   onClick={() => deleteProfilePicture()}
                   disabled={deletingProfile}
-                  className="absolute bottom-0 left-[calc(50%-4rem)] bg-white p-2 rounded-full shadow cursor-pointer hover:bg-red-100 transition"
+                  className="absolute bottom-0 left-[calc(50%-3.35rem)] rounded-full bg-white p-2 shadow transition hover:bg-red-100 sm:left-[calc(50%-3.8rem)] md:left-[calc(50%-4rem)]"
                 >
-                  <Trash2 size={20} className="text-red-600" />
+                  <Trash2 size={18} className="text-red-600" />
                 </button>
               )}
             </>
@@ -599,17 +604,18 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
 
         {/* Editable Fields */}
         <div className="mb-6">
-          <div className="flex items-center justify-center gap-3">
-            <h1 className="text-3xl font-bold text-gray-900 text-center">
+          <div className="flex flex-col items-center justify-center gap-2 text-center sm:gap-3">
+            <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
               {displayName}
             </h1>
             {isOwnProfile && editingField !== "name" && (
               <button
                 onClick={() => setEditingField("name")}
-                className="bg-primary text-white p-2 rounded-full hover:bg-primary-dark transition"
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-2 text-sm text-white transition hover:bg-primary-dark"
                 title="Edit Name"
               >
                 <Edit2 size={16} />
+                Edit
               </button>
             )}
           </div>
@@ -626,15 +632,15 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
             </div>
           )}
 
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2 rounded-2xl border border-gray-200 bg-gradient-to-r from-slate-50 to-blue-50 p-4">
+          <div className="mt-6 grid gap-3 md:grid-cols-2 md:gap-4">
+            <div className="rounded-2xl border border-gray-200 bg-gradient-to-r from-slate-50 to-blue-50 p-4 md:col-span-2">
               <EditableField
                 label="Professional Headline"
                 value={displayHeadline}
                 field="headline"
                 onSave={(value) => handleFieldSave("headline", value)}
                 showLabel
-                valueClassName="text-lg font-semibold text-gray-900"
+                valueClassName="text-base font-semibold text-gray-900 sm:text-lg"
               />
             </div>
 
@@ -687,30 +693,30 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
 
         {/* Resume Section */}
         {isOwnProfile && (
-          <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+            <div className="flex flex-col gap-4">
               <div className="flex items-start">
-                <FileUp size={18} className="text-gray-600 mr-2 mt-0.5" />
+                <FileUp size={18} className="mr-2 mt-0.5 text-gray-600" />
                 <div className="text-left">
                   <p className="font-semibold text-gray-700">Resume</p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm leading-6 text-gray-500">
                     {hasResume
                       ? "Your resume is uploaded. You can view, update, or delete it."
                       : "Upload your resume to make it available in the resume section."}
                   </p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm leading-6 text-gray-500">
                     Resume upload can auto-extract relevant details like Education, Experience, and Skills.
                   </p>
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="grid gap-2 sm:flex sm:flex-wrap">
                 {hasResume && (
                   <a
                     href={resolvedResumeUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-center gap-1 rounded border border-gray-300 bg-white px-3 py-2 text-gray-700 transition hover:bg-gray-100"
+                    className="flex items-center justify-center gap-1 rounded border border-gray-300 bg-white px-3 py-2 text-gray-700 transition hover:bg-gray-100"
                   >
                     <Download size={16} />
                     View Resume
@@ -721,7 +727,7 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
                   className={`flex items-center gap-1 rounded px-3 py-2 text-white transition ${
                     isUploadingResume
                       ? "cursor-not-allowed bg-blue-400"
-                      : "cursor-pointer bg-primary hover:bg-primary-dark"
+                      : "cursor-pointer justify-center bg-primary hover:bg-primary-dark"
                   }`}
                 >
                   {isUploadingResume ? (
@@ -744,7 +750,7 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
                   <button
                     onClick={() => removeResume()}
                     disabled={isDeletingResume || isUploadingResume}
-                    className="flex items-center gap-1 rounded border border-red-200 bg-white px-3 py-2 text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex items-center justify-center gap-1 rounded border border-red-200 bg-white px-3 py-2 text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isDeletingResume ? (
                       <Loader2 size={16} className="animate-spin" />
@@ -775,22 +781,22 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
         )}
 
         {!isOwnProfile && hasResume && (
-          <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+            <div className="flex flex-col gap-3">
               <div className="flex items-start">
-                <FileText size={18} className="text-gray-600 mr-2 mt-0.5" />
+                <FileText size={18} className="mr-2 mt-0.5 text-gray-600" />
                 <div className="text-left">
                   <p className="font-semibold text-gray-700">Resume</p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm leading-6 text-gray-500">
                     {userData.name}'s resume is available to view and download.
                   </p>
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="grid gap-2 sm:flex sm:flex-wrap">
                 <Link
                   to={`/resume/${userData.username}`}
-                  className="flex items-center gap-1 rounded bg-primary px-3 py-2 text-white transition hover:bg-primary-dark"
+                  className="flex items-center justify-center gap-1 rounded bg-primary px-3 py-2 text-white transition hover:bg-primary-dark"
                 >
                   <FileText size={16} />
                   View Resume
@@ -800,7 +806,7 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
                   href={resolvedResumeUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-1 rounded border border-gray-300 bg-white px-3 py-2 text-gray-700 transition hover:bg-gray-100"
+                  className="flex items-center justify-center gap-1 rounded border border-gray-300 bg-white px-3 py-2 text-gray-700 transition hover:bg-gray-100"
                 >
                   <Download size={16} />
                   Open
@@ -814,7 +820,14 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
         {isOwnProfile ? (
           <div></div>
         ) : (
-          <div className="flex justify-center">{renderConnectionButton()}</div>
+          <div className="border-t border-slate-100 pt-2">
+            {mutualConnections?.data?.mutualCount ? (
+              <p className="mb-2 text-center text-xs text-slate-500">
+                You and this user share {mutualConnections.data.mutualCount} mutual connection{mutualConnections.data.mutualCount === 1 ? "" : "s"}.
+              </p>
+            ) : null}
+            <div className="flex justify-center">{renderConnectionButton()}</div>
+          </div>
         )}
       </div>
 

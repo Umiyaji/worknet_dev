@@ -25,6 +25,7 @@ import JobsListingPage from "./pages/JobsListingPage";
 import JobDetailPage from "./pages/JobDetailPage";
 import RecruiterProfilePage from "./pages/RecruiterProfilePage";
 import MyApplicationsPage from "./pages/MyApplicationsPage";
+import GlobalUploadProgressBar from "./components/GlobalUploadProgressBar";
 
 const RecruiterRoute = ({ authUser, children }) => {
   if (!authUser) return <Navigate to="/login" />;
@@ -55,6 +56,7 @@ function App() {
 
   return (
     <Layout>
+      <GlobalUploadProgressBar />
       <Routes>
         <Route
           path="/"

@@ -126,12 +126,26 @@ const userSchema = new mongoose.Schema(
 				ref: "User",
 			},
 		],
+		profileViewsCount: {
+			type: Number,
+			default: 0,
+		},
+		recruiterRejectionTemplates: {
+			type: [String],
+			default: [
+				"Thank you for applying. After review, we are moving forward with candidates whose background aligns more closely with this role right now.",
+				"We appreciate your time and interest. At this stage, we selected candidates with more direct experience for this position.",
+			],
+		},
 	},
 	{ timestamps: true }
 );
 
 userSchema.index({ college: 1 });
 userSchema.index({ city: 1 });
+userSchema.index({ role: 1, college: 1 });
+userSchema.index({ role: 1, city: 1 });
+userSchema.index({ name: "text", username: "text" });
 
 const User = mongoose.model("User", userSchema);
 

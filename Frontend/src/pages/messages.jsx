@@ -11,6 +11,7 @@ import { formatDistanceToNow } from "date-fns";
 import toast from "react-hot-toast";
 import { connectSocket } from "../lib/socket";
 import SmartImage from "../components/SmartImage";
+import { useSearchParams } from "react-router-dom";
 
 const fallbackAvatar = "/avatar.png";
 
@@ -43,6 +44,8 @@ const readFileAsDataUrl = (file) =>
 const Messages = () => {
   const queryClient = useQueryClient();
   const authUser = queryClient.getQueryData(["authUser"]);
+  const [searchParams] = useSearchParams();
+  const requestedUserId = searchParams.get("user");
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [messageText, setMessageText] = useState("");
@@ -51,13 +54,20 @@ const Messages = () => {
   const fileInputRef = useRef(null);
   const activeUserIdRef = useRef(null);
 
-  const { data: conversationsData = [], isLoading: isConversationsLoading } =
+  const {
+    data: conversationsData = [],
+    isLoading: isConversationsLoading,
+    isError: isConversationsError,
+    error: conversationsError,
+  } =
     useQuery({
       queryKey: ["conversations"],
       queryFn: async () => {
         const res = await axiosInstance.get("/messages/conversations");
         return res.data;
       },
+      enabled: Boolean(authUser?._id),
+      retry: false,
     });
 
   const conversations = getConversationList(conversationsData);
@@ -93,18 +103,35 @@ const Messages = () => {
   }, [activeUserId]);
 
   React.useEffect(() => {
-    if (!selectedUserId && conversations[0]?.user?._id) {
+    if (selectedUserId) {
+      return;
+    }
+
+    if (
+      requestedUserId &&
+      conversations.some((conversation) => conversation.user?._id === requestedUserId)
+    ) {
+      setSelectedUserId(requestedUserId);
+      return;
+    }
+
+    if (conversations[0]?.user?._id) {
       setSelectedUserId(conversations[0].user._id);
     }
-  }, [conversations, selectedUserId]);
+  }, [conversations, requestedUserId, selectedUserId]);
 
-  const { data: activeConversation, isLoading: isMessagesLoading } = useQuery({
+  const {
+    data: activeConversation,
+    isLoading: isMessagesLoading,
+    isError: isMessagesError,
+  } = useQuery({
     queryKey: ["messages", activeUserId],
     queryFn: async () => {
       const res = await axiosInstance.get(`/messages/${activeUserId}`);
       return res.data;
     },
-    enabled: Boolean(activeUserId),
+    enabled: Boolean(activeUserId && authUser?._id),
+    retry: false,
   });
 
   const { mutate: markConversationRead } = useMutation({
@@ -377,6 +404,11 @@ const Messages = () => {
                   <div className="px-4 py-6 text-sm text-gray-500">
                     Loading conversations...
                   </div>
+                ) : isConversationsError ? (
+                  <div className="px-4 py-6 text-sm text-red-500">
+                    {conversationsError?.response?.data?.message ||
+                      "Failed to load conversations."}
+                  </div>
                 ) : filteredConversations.length ? (
                   filteredConversations.map((conversation) => (
                     <div key={conversation._id} className="mb-2">
@@ -432,6 +464,10 @@ const Messages = () => {
                 ) : isMessagesLoading ? (
                   <div className="text-sm text-gray-500">
                     Loading messages...
+                  </div>
+                ) : isMessagesError ? (
+                  <div className="text-sm text-red-500">
+                    Failed to load messages for this conversation.
                   </div>
                 ) : (
                   <>

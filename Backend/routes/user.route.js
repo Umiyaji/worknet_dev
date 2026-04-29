@@ -3,6 +3,7 @@ import { protectRoute } from "../middleware/auth.middleware.js";
 import {
     getSuggestedConnections,
     getPublicProfile,
+    getMyAnalytics,
     updateProfile,
     searchUsers,
     deleteProfilePicture,
@@ -17,6 +18,7 @@ const router = express.Router();
 // Protected GET routes
 router.get("/search", protectRoute, searchUsers);
 router.get("/suggestions", protectRoute, getSuggestedConnections);
+router.get("/analytics/me", protectRoute, getMyAnalytics);
 router.get("/:username", protectRoute, getPublicProfile);
 
 // Protected DELETE routes

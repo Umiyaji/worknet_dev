@@ -7,6 +7,7 @@ import {
 	processJobRowById,
 	processScheduledRows,
 } from "../lib/jobRowService.js";
+import { getPagination } from "../lib/pagination.js";
 
 const cleanString = (value) => (typeof value === "string" ? value.trim() : "");
 
@@ -77,10 +78,14 @@ const excelRowToPayload = (row) => ({
 
 export const listJobRows = async (req, res) => {
 	try {
+		const { limit, skip } = getPagination(req.query, { defaultLimit: 50, maxLimit: 100 });
 		const rows = await JobRow.find({ recruiterId: req.user._id })
 			.sort({ createdAt: -1 })
+			.skip(skip)
+			.limit(limit)
 			.populate("postId", "_id createdAt")
-			.populate("jobId", "_id");
+			.populate("jobId", "_id")
+			.lean();
 
 		return res.json(rows);
 	} catch (error) {

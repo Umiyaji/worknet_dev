@@ -256,7 +256,12 @@ export const signup = async (req, res) => {
 
 export const login = async (req, res) => {
 	try {
-		const { username, password } = req.body;
+		const username = normalizeUsername(req.body?.username);
+		const password = String(req.body?.password || "");
+
+		if (!username || !password) {
+			return res.status(400).json({ message: "Username and password are required" });
+		}
 
 		const user = await User.findOne({ username });
 		if (!user) {

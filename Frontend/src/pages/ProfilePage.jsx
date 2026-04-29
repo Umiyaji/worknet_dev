@@ -1,17 +1,16 @@
+import { useRef, useState } from "react";
 import { useParams, useNavigate, Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader } from "lucide-react";
+import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
-
 import ProfileHeader from "../components/ProfileHeader";
 import AboutSection from "../components/AboutSection";
 import ExperienceSection from "../components/ExperienceSection";
 import EducationSection from "../components/EducationSection";
 import SkillsSection from "../components/SkillsSection";
 import PostCard from "../components/PostCard";
-
-import toast from "react-hot-toast";
-import { Loader, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
-import { useRef, useState } from "react";
+import ProfileCompletenessCard from "../components/ProfileCompletenessCard";
 
 const ProfilePage = () => {
   const { username } = useParams();
@@ -48,6 +47,7 @@ const ProfilePage = () => {
       toast.success("Profile updated successfully");
       queryClient.invalidateQueries({ queryKey: ["userProfile", username] });
       queryClient.invalidateQueries({ queryKey: ["authUser"] });
+      queryClient.invalidateQueries({ queryKey: ["targetLists"] });
 
       if (updatedUser) {
         queryClient.setQueryData(["authUser"], (prev) => ({
@@ -110,9 +110,15 @@ const ProfilePage = () => {
     });
   };
 
+  const goToSection = (sectionId) => {
+    const section = document.getElementById(sectionId);
+    if (!section) return;
+    section.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   if (isUserProfileLoading || !userProfile || !authUser) {
     return (
-      <div className="flex justify-center items-center h-screen">
+      <div className="flex h-screen items-center justify-center">
         <Loader size={48} className="animate-spin text-primary" />
       </div>
     );
@@ -127,7 +133,7 @@ const ProfilePage = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto pb-4">
+    <div className="mx-auto max-w-4xl pb-4">
       <div className="mb-3">
         <button
           type="button"
@@ -138,39 +144,60 @@ const ProfilePage = () => {
           Back
         </button>
       </div>
-      <ProfileHeader
-        userData={userData}
-        isOwnProfile={isOwnProfile}
-        onSave={handleSave}
-      />
-      <AboutSection
-        userData={userData}
-        isOwnProfile={isOwnProfile}
-        onSave={handleSave}
-      />
-      <ExperienceSection
-        userData={userData}
-        isOwnProfile={isOwnProfile}
-        onSave={handleSave}
-      />
-      <EducationSection
-        userData={userData}
-        isOwnProfile={isOwnProfile}
-        onSave={handleSave}
-      />
-      <SkillsSection
-        userData={userData}
-        isOwnProfile={isOwnProfile}
-        onSave={handleSave}
-      />
 
-      {userPosts && userPosts.length > 0 && (
-        <div className="mt-6 bg-white rounded-lg shadow">
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center justify-between mb-4">
+      <div id="profile-header">
+        <ProfileHeader
+          userData={userData}
+          isOwnProfile={isOwnProfile}
+          onSave={handleSave}
+        />
+      </div>
+
+      {isOwnProfile ? (
+        <ProfileCompletenessCard userData={userData} onGoToSection={goToSection} />
+      ) : null}
+
+      <div id="profile-about">
+        <AboutSection
+          userData={userData}
+          isOwnProfile={isOwnProfile}
+          onSave={handleSave}
+        />
+      </div>
+      <div id="profile-experience">
+        <ExperienceSection
+          userData={userData}
+          isOwnProfile={isOwnProfile}
+          onSave={handleSave}
+        />
+      </div>
+      <div id="profile-education">
+        <EducationSection
+          userData={userData}
+          isOwnProfile={isOwnProfile}
+          onSave={handleSave}
+        />
+      </div>
+      <div id="profile-skills">
+        <SkillsSection
+          userData={userData}
+          isOwnProfile={isOwnProfile}
+          onSave={handleSave}
+        />
+      </div>
+
+      {userPosts && userPosts.length > 0 ? (
+        <div className="mt-6 overflow-hidden rounded-[28px] border border-slate-200 bg-white/90 shadow-sm backdrop-blur">
+          <div className="border-b border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.10),_transparent_30%),linear-gradient(180deg,_#ffffff,_#f8fbff)] p-6">
+            <div className="mb-4 flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">Activity</h2>
-                <p className="text-sm text-gray-600">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Activity
+                </p>
+                <h2 className="mt-1 text-2xl font-bold text-gray-900">
+                  Recent posts and profile momentum
+                </h2>
+                <p className="mt-1 text-sm text-gray-600">
                   {userPosts.length} posts
                 </p>
               </div>
@@ -178,61 +205,60 @@ const ProfilePage = () => {
           </div>
 
           {isUserPostsLoading ? (
-            <div className="flex justify-center items-center py-8">
+            <div className="flex items-center justify-center py-8">
               <Loader size={32} className="animate-spin text-primary" />
             </div>
           ) : (
-            <div className="p-6 relative">
-              {postsToDisplay?.length > 2 && (
+            <div className="relative p-6">
+              {postsToDisplay?.length > 2 ? (
                 <button
                   onClick={() => scrollPosts("left")}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 z-10 bg-white border border-gray-300 rounded-full p-2 shadow hover:bg-gray-50"
+                  className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full border border-gray-300 bg-white p-2 shadow hover:bg-gray-50"
                 >
                   <ChevronLeft size={20} />
                 </button>
-              )}
+              ) : null}
 
-              {postsToDisplay?.length > 2 && (
+              {postsToDisplay?.length > 2 ? (
                 <button
                   onClick={() => scrollPosts("right")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-white border border-gray-300 rounded-full p-2 shadow hover:bg-gray-50"
+                  className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full border border-gray-300 bg-white p-2 shadow hover:bg-gray-50"
                 >
                   <ChevronRight size={20} />
                 </button>
-              )}
+              ) : null}
 
               <div
                 ref={scrollContainerRef}
-                className="flex gap-4 overflow-x-auto scroll-smooth pb-2 px-8 no-scrollbar"
+                className="no-scrollbar flex gap-4 overflow-x-auto scroll-smooth px-8 pb-2"
               >
-                {postsToDisplay &&
-                  postsToDisplay.map((post) => (
-                    <PostCard
-                      key={post._id}
-                      post={post}
-                      likePost={likePost}
-                      handleCommentPost={handleCommentPost}
-                      handleSharePost={handleSharePost}
-                    />
-                  ))}
+                {postsToDisplay?.map((post) => (
+                  <PostCard
+                    key={post._id}
+                    post={post}
+                    likePost={likePost}
+                    handleCommentPost={handleCommentPost}
+                    handleSharePost={handleSharePost}
+                  />
+                ))}
               </div>
 
-              {userPosts && userPosts.length > 8 && (
+              {userPosts.length > 8 ? (
                 <div className="mt-6 text-center">
                   <button
                     onClick={() => setShowAllPosts(!showAllPosts)}
-                    className="text-blue-600 hover:text-blue-800 font-semibold text-sm"
+                    className="text-sm font-semibold text-blue-600 hover:text-blue-800"
                   >
                     {showAllPosts
-                      ? "Show less posts ↑"
-                      : `Show all posts → (${userPosts.length} total)`}
+                      ? "Show less posts"
+                      : `Show all posts (${userPosts.length} total)`}
                   </button>
                 </div>
-              )}
+              ) : null}
             </div>
           )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 };

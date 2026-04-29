@@ -70,6 +70,21 @@ const applicationSchema = new mongoose.Schema(
 			default: "",
 			trim: true,
 		},
+		tags: {
+			type: [String],
+			default: [],
+		},
+		interviewSchedule: {
+			scheduledAt: { type: Date, default: null },
+			mode: { type: String, default: "", trim: true },
+			meetingLink: { type: String, default: "", trim: true },
+			notes: { type: String, default: "", trim: true },
+		},
+		rejectionTemplateUsed: {
+			type: String,
+			default: "",
+			trim: true,
+		},
 		lastStatusUpdatedAt: {
 			type: Date,
 			default: Date.now,
@@ -105,6 +120,8 @@ const applicationSchema = new mongoose.Schema(
 );
 
 applicationSchema.index({ userId: 1, jobId: 1 }, { unique: true });
+applicationSchema.index({ jobId: 1, status: 1, createdAt: -1 });
+applicationSchema.index({ userId: 1, createdAt: -1 });
 
 const Application = mongoose.model("Application", applicationSchema);
 export default Application;

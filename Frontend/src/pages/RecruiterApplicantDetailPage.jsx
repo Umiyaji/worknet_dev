@@ -41,11 +41,35 @@ const RecruiterApplicantDetailPage = () => {
   const [statusNote, setStatusNote] = useState("");
   const [recruiterNotes, setRecruiterNotes] = useState("");
   const [messageText, setMessageText] = useState("");
+  const [tagsInput, setTagsInput] = useState("");
+  const [interviewAt, setInterviewAt] = useState("");
+  const [interviewMode, setInterviewMode] = useState("online");
+  const [interviewLink, setInterviewLink] = useState("");
+  const [interviewNotes, setInterviewNotes] = useState("");
+  const [selectedRejectionTemplate, setSelectedRejectionTemplate] = useState("");
+
+  const { data: rejectionTemplates } = useQuery({
+    queryKey: ["rejectionTemplates"],
+    queryFn: async () => {
+      const res = await axiosInstance.get("/recruiter/rejection-templates");
+      return res.data?.templates || [];
+    },
+  });
 
   useEffect(() => {
     setSelectedStatus(application?.status || "applied");
     setRecruiterNotes(application?.recruiterNotes || "");
-  }, [application?.status, application?.recruiterNotes]);
+    setTagsInput((application?.tags || []).join(", "));
+    setInterviewAt(
+      application?.interviewSchedule?.scheduledAt
+        ? new Date(application.interviewSchedule.scheduledAt).toISOString().slice(0, 16)
+        : "",
+    );
+    setInterviewMode(application?.interviewSchedule?.mode || "online");
+    setInterviewLink(application?.interviewSchedule?.meetingLink || "");
+    setInterviewNotes(application?.interviewSchedule?.notes || "");
+    setSelectedRejectionTemplate(application?.rejectionTemplateUsed || "");
+  }, [application]);
 
   const refreshApplicationQueries = () => {
     queryClient.invalidateQueries({ queryKey: ["jobApplicants", jobId] });
@@ -61,6 +85,8 @@ const RecruiterApplicantDetailPage = () => {
       const res = await axiosInstance.put(`/jobs/${jobId}/applicants/${applicationId}/status`, {
         status: selectedStatus,
         note: statusNote,
+        rejectionTemplateUsed:
+          selectedStatus === "rejected" ? selectedRejectionTemplate : "",
       });
       return res.data;
     },
@@ -71,6 +97,31 @@ const RecruiterApplicantDetailPage = () => {
     },
     onError: (error) => {
       toast.error(error.response?.data?.message || "Failed to update status");
+    },
+  });
+
+  const { mutate: savePipelineMeta, isPending: isSavingPipelineMeta } = useMutation({
+    mutationFn: async () => {
+      const res = await axiosInstance.put(`/jobs/${jobId}/applicants/${applicationId}/pipeline`, {
+        tags: tagsInput
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        interviewSchedule: {
+          scheduledAt: interviewAt ? new Date(interviewAt).toISOString() : null,
+          mode: interviewMode,
+          meetingLink: interviewLink,
+          notes: interviewNotes,
+        },
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success("Pipeline data saved");
+      refreshApplicationQueries();
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || "Failed to save pipeline data");
     },
   });
 
@@ -191,6 +242,25 @@ const RecruiterApplicantDetailPage = () => {
                     {isUpdatingStatus ? "Updating..." : "Update"}
                   </button>
                 </div>
+                {selectedStatus === "rejected" ? (
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-3">
+                    <select
+                      value={selectedRejectionTemplate}
+                      onChange={(e) => setSelectedRejectionTemplate(e.target.value)}
+                      className="rounded-md border border-slate-300 px-3 py-2 bg-white"
+                    >
+                      <option value="">Select rejection template</option>
+                      {(rejectionTemplates || []).map((template, idx) => (
+                        <option key={`template-${idx}`} value={template}>
+                          {template.slice(0, 90)}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500">
+                      Selected template is saved with this status update.
+                    </p>
+                  </div>
+                ) : null}
 
                 <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
                   <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">Status Timeline</p>
@@ -241,6 +311,52 @@ const RecruiterApplicantDetailPage = () => {
                   {isSavingNotes ? "Saving..." : "Save Notes"}
                 </button>
 
+                <div className="border-t border-slate-200 pt-3">
+                  <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">Tags & Interview</p>
+                  <input
+                    value={tagsInput}
+                    onChange={(e) => setTagsInput(e.target.value)}
+                    placeholder="Tags (comma separated): strong-mern, immediate"
+                    className="mb-2 w-full rounded-md border border-slate-300 px-3 py-2"
+                  />
+                  <input
+                    type="datetime-local"
+                    value={interviewAt}
+                    onChange={(e) => setInterviewAt(e.target.value)}
+                    className="mb-2 w-full rounded-md border border-slate-300 px-3 py-2"
+                  />
+                  <select
+                    value={interviewMode}
+                    onChange={(e) => setInterviewMode(e.target.value)}
+                    className="mb-2 w-full rounded-md border border-slate-300 px-3 py-2"
+                  >
+                    <option value="online">Online</option>
+                    <option value="onsite">Onsite</option>
+                    <option value="phone">Phone</option>
+                  </select>
+                  <input
+                    value={interviewLink}
+                    onChange={(e) => setInterviewLink(e.target.value)}
+                    placeholder="Meeting link (if online)"
+                    className="mb-2 w-full rounded-md border border-slate-300 px-3 py-2"
+                  />
+                  <textarea
+                    value={interviewNotes}
+                    onChange={(e) => setInterviewNotes(e.target.value)}
+                    rows={3}
+                    placeholder="Interview notes"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => savePipelineMeta()}
+                    disabled={isSavingPipelineMeta}
+                    className="mt-2 w-full rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    {isSavingPipelineMeta ? "Saving..." : "Save Pipeline Meta"}
+                  </button>
+                </div>
+
                 <textarea
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
@@ -258,7 +374,7 @@ const RecruiterApplicantDetailPage = () => {
                 </button>
 
                 <Link
-                  to="/messages"
+                  to={application?.userId?._id ? `/messages?user=${application.userId._id}` : "/messages"}
                   className="inline-flex w-full items-center justify-center rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                 >
                   Open Full Chat

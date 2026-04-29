@@ -9,12 +9,14 @@ import User from "../models/user.model.js";
 import { emitToUser } from "../lib/socket.js";
 import { deleteJobPost, syncJobPost } from "../lib/jobPostSync.js";
 import { generateGeminiContent } from "../lib/gemini.js";
+import { getPagination } from "../lib/pagination.js";
 
 const excelPreviewStore = new Map();
 const PREVIEW_TTL_MS = 15 * 60 * 1000;
 const AI_DRAFT_TIMEOUT_MS = 12000;
 
 const cleanString = (value) => (typeof value === "string" ? value.trim() : "");
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const normalizeSkills = (skills) => {
 	if (Array.isArray(skills)) {
@@ -148,6 +150,17 @@ const parsePublishAt = (value) => {
 };
 
 const APPLICATION_STATUSES = ["applied", "reviewing", "shortlisted", "rejected", "hired"];
+const INTERVIEW_MODES = ["online", "onsite", "phone"];
+const normalizeTags = (value) => {
+	if (!Array.isArray(value)) return [];
+	return Array.from(
+		new Set(
+			value
+				.map((item) => cleanString(item).toLowerCase())
+				.filter(Boolean)
+		)
+	).slice(0, 20);
+};
 
 const createNotification = async (payload) => {
 	try {
@@ -596,27 +609,39 @@ const createTargetedJobNotifications = async (job, recruiter) => {
 		role: "user",
 		_id: { $ne: recruiter._id },
 		$or: targetingRules,
-	}).select("_id");
+	}).select("_id").lean().cursor();
 
-	if (!matchingUsers.length) {
-		return;
+	let notifications = [];
+	const flushNotifications = async () => {
+		if (!notifications.length) {
+			return;
+		}
+
+		const createdNotifications = await Notification.insertMany(notifications, { ordered: false });
+		for (const notification of createdNotifications) {
+			emitToUser(notification.recipient, "notification:new", notification);
+		}
+		notifications = [];
+	};
+
+	for await (const user of matchingUsers) {
+		notifications.push({
+			recipient: user._id,
+			type: "targetedJob",
+			relatedUser: recruiter._id,
+			relatedJob: job._id,
+			metadata: {
+				jobTitle: job.title,
+				companyName: job.companyName,
+			},
+		});
+
+		if (notifications.length >= 500) {
+			await flushNotifications();
+		}
 	}
 
-	const notifications = matchingUsers.map((user) => ({
-		recipient: user._id,
-		type: "targetedJob",
-		relatedUser: recruiter._id,
-		relatedJob: job._id,
-		metadata: {
-			jobTitle: job.title,
-			companyName: job.companyName,
-		},
-	}));
-
-	const createdNotifications = await Notification.insertMany(notifications);
-	for (const notification of createdNotifications) {
-		emitToUser(notification.recipient, "notification:new", notification);
-	}
+	await flushNotifications();
 };
 
 const buildPublishDedupKey = (draft, recruiterId) =>
@@ -631,6 +656,61 @@ const buildPublishDedupKey = (draft, recruiterId) =>
 		normalizeTargetValues(draft.targetCities).sort().join("|"),
 		draft.lastDateToApply instanceof Date ? draft.lastDateToApply.toISOString() : "",
 	].join("::");
+
+const parseExperienceYears = (value) => {
+	if (!value) return null;
+	if (typeof value === "number" && Number.isFinite(value)) return value;
+	const match = String(value).match(/(\d+(\.\d+)?)/);
+	if (!match) return null;
+	return Number(match[1]);
+};
+
+const normalizeSkillSet = (skills) =>
+	new Set(
+		(Array.isArray(skills) ? skills : [])
+			.map((skill) => cleanString(skill).toLowerCase())
+			.filter(Boolean)
+	);
+
+const computeJobMatchScore = (job, user) => {
+	if (!user || user.role === "recruiter") return null;
+
+	let score = 0;
+	let weight = 0;
+
+	const jobSkills = normalizeSkillSet(job?.skillsRequired);
+	const userSkills = normalizeSkillSet(user?.skills);
+	if (jobSkills.size) {
+		weight += 55;
+		let matched = 0;
+		jobSkills.forEach((skill) => {
+			if (userSkills.has(skill)) matched += 1;
+		});
+		score += (matched / jobSkills.size) * 55;
+	}
+
+	const jobExp = parseExperienceYears(job?.experienceRequired);
+	const userExp = parseExperienceYears(user?.experience?.length ? user.experience.length : null);
+	if (jobExp !== null) {
+		weight += 25;
+		if (userExp !== null) {
+			const expRatio = Math.min(userExp / Math.max(jobExp, 1), 1);
+			score += expRatio * 25;
+		}
+	}
+
+	const jobLocation = cleanString(job?.location).toLowerCase();
+	const userLocation = cleanString(user?.location).toLowerCase();
+	if (jobLocation) {
+		weight += 20;
+		if (jobLocation.includes("remote") || userLocation.includes(jobLocation) || jobLocation.includes(userLocation)) {
+			score += 20;
+		}
+	}
+
+	if (!weight) return null;
+	return Math.round((score / weight) * 100);
+};
 
 export const createJob = async (req, res) => {
 	try {
@@ -726,7 +806,12 @@ export const deleteJob = async (req, res) => {
 
 export const getRecruiterJobs = async (req, res) => {
 	try {
-		const jobs = await Job.find({ companyId: req.user._id }).sort({ createdAt: -1 });
+		const { limit, skip } = getPagination(req.query, { defaultLimit: 50, maxLimit: 100 });
+		const jobs = await Job.find({ companyId: req.user._id })
+			.sort({ createdAt: -1 })
+			.skip(skip)
+			.limit(limit)
+			.lean();
 		const jobIds = jobs.map((job) => job._id);
 
 		const applicationStats = jobIds.length
@@ -778,7 +863,7 @@ export const getRecruiterJobs = async (req, res) => {
 				};
 
 				return {
-					...job.toObject(),
+					...job,
 					totalApplicants: stats.totalApplicants,
 					statusBreakdown: stats.statusBreakdown,
 					isScheduled: !isPublished,
@@ -796,6 +881,7 @@ export const getRecruiterJobs = async (req, res) => {
 export const getAllJobs = async (req, res) => {
 	try {
 		const { search = "", location = "", jobType = "" } = req.query;
+		const { limit, skip } = getPagination(req.query, { defaultLimit: 25, maxLimit: 100 });
 		const baseFilter = {
 			isActive: true,
 			publishAt: { $lte: new Date() },
@@ -806,18 +892,21 @@ export const getAllJobs = async (req, res) => {
 			andFilters.push(buildTargetedVisibilityFilter(req.user));
 		}
 
-		if (search) {
+		const normalizedSearch = cleanString(search);
+		if (normalizedSearch) {
+			const safeSearch = escapeRegex(normalizedSearch).slice(0, 80);
 			andFilters.push({
 				$or: [
-					{ title: { $regex: search, $options: "i" } },
-					{ description: { $regex: search, $options: "i" } },
-					{ skillsRequired: { $regex: search, $options: "i" } },
+					{ title: { $regex: safeSearch, $options: "i" } },
+					{ description: { $regex: safeSearch, $options: "i" } },
+					{ skillsRequired: { $regex: safeSearch, $options: "i" } },
 				],
 			});
 		}
 
-		if (location) {
-			andFilters.push({ location: { $regex: location, $options: "i" } });
+		const normalizedLocation = cleanString(location);
+		if (normalizedLocation) {
+			andFilters.push({ location: { $regex: escapeRegex(normalizedLocation).slice(0, 80), $options: "i" } });
 		}
 
 		if (jobType && ["remote", "on-site", "hybrid"].includes(jobType)) {
@@ -828,17 +917,24 @@ export const getAllJobs = async (req, res) => {
 
 		const jobs = await Job.find(filter)
 			.populate("companyId", "name username companyName companyLogo industry companyLocation")
-			.sort({ createdAt: -1 });
+			.sort({ createdAt: -1 })
+			.skip(skip)
+			.limit(limit)
+			.lean();
 
 		let appliedJobIds = new Set();
 		if (req.user?.role !== "recruiter") {
-			const applications = await Application.find({ userId: req.user._id }).select("jobId status");
+			const applications = await Application.find({
+				userId: req.user._id,
+				jobId: { $in: jobs.map((job) => job._id) },
+			}).select("jobId status").lean();
 			appliedJobIds = new Set(applications.map((application) => application.jobId.toString()));
 		}
 
 		return res.json(
 			jobs.map((job) => ({
-				...sanitizeJobForViewer(job.toObject(), req.user),
+				...sanitizeJobForViewer(job, req.user),
+				matchScore: computeJobMatchScore(job, req.user),
 				hasApplied: appliedJobIds.has(job._id.toString()),
 				recommendedForYou:
 					job.visibilityType === "targeted" &&
@@ -890,9 +986,13 @@ export const getJobById = async (req, res) => {
 				.select("status createdAt updatedAt lastStatusUpdatedAt")
 				.sort({ createdAt: -1 });
 		}
+		if (!isOwner) {
+			await Job.updateOne({ _id: jobId }, { $inc: { viewCount: 1 } });
+		}
 
 		return res.json({
 			...sanitizeJobForViewer(job.toObject(), req.user, { isOwner }),
+			matchScore: computeJobMatchScore(job.toObject(), req.user),
 			totalApplicants,
 			hasApplied: Boolean(myApplication),
 			myApplication,
@@ -1016,6 +1116,7 @@ export const getApplicantsForJob = async (req, res) => {
 	try {
 		const { jobId } = req.params;
 		const { status = "", search = "" } = req.query;
+		const { limit, skip } = getPagination(req.query, { defaultLimit: 50, maxLimit: 100 });
 
 		if (!mongoose.Types.ObjectId.isValid(jobId)) {
 			return res.status(400).json({ message: "Invalid job id" });
@@ -1034,33 +1135,26 @@ export const getApplicantsForJob = async (req, res) => {
 		if (APPLICATION_STATUSES.includes(status)) {
 			query.status = status;
 		}
+		const normalizedSearch = cleanString(search);
+		if (normalizedSearch) {
+			const safeSearch = escapeRegex(normalizedSearch).slice(0, 80);
+			query.$or = [
+				{ fullName: { $regex: safeSearch, $options: "i" } },
+				{ email: { $regex: safeSearch, $options: "i" } },
+				{ phone: { $regex: safeSearch, $options: "i" } },
+				{ currentLocation: { $regex: safeSearch, $options: "i" } },
+			];
+		}
 
 		const applicants = await Application.find(query)
 			.populate("userId", "name username email profilePicture headline skills experience education resume")
 			.populate("lastStatusUpdatedBy", "name username role")
-			.sort({ createdAt: -1 });
+			.sort({ createdAt: -1 })
+			.skip(skip)
+			.limit(limit)
+			.lean();
 
-		const normalizedSearch = cleanString(search).toLowerCase();
-		const filteredApplicants = normalizedSearch
-			? applicants.filter((application) => {
-					const haystack = [
-						application.fullName,
-						application.email,
-						application.phone,
-						application.currentLocation,
-						application.userId?.name,
-						application.userId?.username,
-						application.userId?.headline,
-					]
-						.filter(Boolean)
-						.join(" ")
-						.toLowerCase();
-
-					return haystack.includes(normalizedSearch);
-			  })
-			: applicants;
-
-		return res.json(filteredApplicants);
+		return res.json(applicants);
 	} catch (error) {
 		console.error("Error in getApplicantsForJob controller:", error);
 		return res.status(500).json({ message: "Server error" });
@@ -1069,6 +1163,7 @@ export const getApplicantsForJob = async (req, res) => {
 
 export const getMyApplications = async (req, res) => {
 	try {
+		const { limit, skip } = getPagination(req.query, { defaultLimit: 50, maxLimit: 100 });
 		const applications = await Application.find({ userId: req.user._id })
 			.populate({
 				path: "jobId",
@@ -1078,11 +1173,14 @@ export const getMyApplications = async (req, res) => {
 				},
 			})
 			.populate("lastStatusUpdatedBy", "name username role")
-			.sort({ createdAt: -1 });
+			.sort({ createdAt: -1 })
+			.skip(skip)
+			.limit(limit)
+			.lean();
 
 		return res.json(
 			applications.map((application) => ({
-				...application.toObject(),
+				...application,
 				isJobActive: Boolean(
 					application.jobId?.lastDateToApply &&
 					new Date(application.jobId.lastDateToApply).getTime() >= Date.now()
@@ -1127,6 +1225,7 @@ export const updateApplicationStatus = async (req, res) => {
 		const { jobId, applicationId } = req.params;
 		const nextStatus = cleanString(req.body?.status);
 		const note = cleanString(req.body?.note);
+		const rejectionTemplateUsed = cleanString(req.body?.rejectionTemplateUsed);
 
 		if (!APPLICATION_STATUSES.includes(nextStatus)) {
 			return res.status(400).json({ message: "Invalid application status" });
@@ -1150,6 +1249,9 @@ export const updateApplicationStatus = async (req, res) => {
 					status: nextStatus,
 					lastStatusUpdatedAt: statusUpdateTimestamp,
 					lastStatusUpdatedBy: req.user._id,
+					...(nextStatus === "rejected" && rejectionTemplateUsed
+						? { rejectionTemplateUsed }
+						: {}),
 				},
 				$push: {
 					statusHistory: {
@@ -1220,6 +1322,54 @@ export const updateApplicationNotes = async (req, res) => {
 		return res.json(populatedApplication);
 	} catch (error) {
 		console.error("Error in updateApplicationNotes controller:", error);
+		return res.status(500).json({ message: "Server error" });
+	}
+};
+
+export const updateApplicationPipelineMeta = async (req, res) => {
+	try {
+		const { jobId, applicationId } = req.params;
+		const { application, error } = await getRecruiterOwnedApplication(jobId, applicationId, req.user._id);
+		if (error) {
+			return res.status(error.status).json({ message: error.message });
+		}
+
+		const tags = normalizeTags(req.body?.tags);
+		const interviewRaw = req.body?.interviewSchedule || {};
+		const scheduledAt = interviewRaw?.scheduledAt ? new Date(interviewRaw.scheduledAt) : null;
+		const mode = cleanString(interviewRaw?.mode).toLowerCase();
+		const meetingLink = cleanString(interviewRaw?.meetingLink);
+		const notes = cleanString(interviewRaw?.notes);
+
+		if (mode && !INTERVIEW_MODES.includes(mode)) {
+			return res.status(400).json({ message: "Invalid interview mode" });
+		}
+
+		await Application.updateOne(
+			{ _id: application._id, jobId },
+			{
+				$set: {
+					tags,
+					interviewSchedule: {
+						scheduledAt:
+							scheduledAt && !Number.isNaN(scheduledAt.getTime()) ? scheduledAt : null,
+						mode,
+						meetingLink,
+						notes,
+					},
+				},
+			},
+			{ runValidators: true }
+		);
+
+		const populatedApplication = await Application.findById(application._id)
+			.populate("userId", "name username email profilePicture headline skills experience education resume")
+			.populate("lastStatusUpdatedBy", "name username role")
+			.populate("statusHistory.changedBy", "name username role");
+
+		return res.json(populatedApplication);
+	} catch (error) {
+		console.error("Error in updateApplicationPipelineMeta controller:", error);
 		return res.status(500).json({ message: "Server error" });
 	}
 };
