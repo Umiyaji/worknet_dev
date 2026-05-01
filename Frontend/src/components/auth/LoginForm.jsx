@@ -19,7 +19,7 @@ const LoginForm = () => {
       queryClient.invalidateQueries({ queryKey: ["authUser"] });
     },
     onError: (err) => {
-      toast.error(err.response.data.message || "Something went wrong");
+      toast.error(err.response?.data?.message || "Something went wrong");
     },
   });
 

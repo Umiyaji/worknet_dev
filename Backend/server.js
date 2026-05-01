@@ -32,7 +32,9 @@ const allowedOrigins = String(process.env.CLIENT_URL || "")
 	.split(",")
 	.map((origin) => origin.trim())
 	.filter(Boolean);
+const allowLocalhostOriginsInProd = String(process.env.ALLOW_LOCALHOST_ORIGINS || "").toLowerCase() === "true";
 const allowNoOriginInDev = process.env.NODE_ENV !== "production";
+const localhostOriginRegex = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
 
 if (!process.env.JWT_SECRET) {
 	throw new Error("Missing required env var: JWT_SECRET");
@@ -57,6 +59,9 @@ app.use(
 				return callback(null, true);
 			}
 			if (origin && allowedOrigins.includes(origin)) {
+				return callback(null, true);
+			}
+			if (origin && allowLocalhostOriginsInProd && localhostOriginRegex.test(origin)) {
 				return callback(null, true);
 			}
 			return callback(new Error("CORS not allowed"));

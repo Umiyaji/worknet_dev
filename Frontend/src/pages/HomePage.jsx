@@ -175,7 +175,7 @@ const HomePage = () => {
             ) : null}
           </div>
 
-          {posts?.length ? (
+          {Array.isArray(posts) && posts.length ? (
             posts.map((post) => <Post key={post._id} post={post} />)
           ) : (
             <div className="rounded-[28px] border border-dashed border-slate-300 bg-white/80 p-10 text-center shadow-sm">

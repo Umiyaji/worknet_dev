@@ -34,7 +34,7 @@ const SuggestionsPage = () => {
             <div className="col-span-1 lg:col-span-3">
                 <div className="max-w-3xl p-4 bg-secondary rounded-lg shadow">
                     <h1 className="text-2xl font-bold mb-4">People You May Know</h1>
-                    {recommendedUsers?.length === 0 ? (
+                    {!Array.isArray(recommendedUsers) || recommendedUsers.length === 0 ? (
                         <p>No suggestions available.</p>
                     ) : (
                         recommendedUsers.map((user) =>

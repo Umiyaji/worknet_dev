@@ -1,4 +1,11 @@
 {
+  "scripts": {
+    "install:all": "npm install && cd Frontend && npm install && cd ../Backend && npm install",
+    "build:frontend": "cd Frontend && npm run build",
+    "start:backend": "cd Backend && npm start",
+    "dev:backend": "cd Backend && npm run dev",
+    "dev:frontend": "cd Frontend && npm run dev"
+  },
   "dependencies": {
     "date-fns": "^4.1.0",
     "lucide-react": "^0.563.0",

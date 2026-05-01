@@ -146,15 +146,28 @@ const Navbar = () => {
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [searchQuery]);
 
-  const unreadNotificationCount =
-    notifications?.data?.filter((notif) => !notif.read).length || 0;
-  const unreadConnectionRequestsCount =
-    connectionRequests?.data?.length || 0;
-  const unreadMessagesCount =
-    conversations?.reduce(
-      (total, conversation) => total + (conversation.unreadCount || 0),
-      0,
-    ) || 0;
+  // ✅ FIXED: Ensure all data is always an array with proper type checking
+  const notificationsList = Array.isArray(notifications?.data)
+    ? notifications.data
+    : [];
+
+  const unreadNotificationCount = notificationsList.filter(
+    (notif) => !notif.read,
+  ).length;
+
+  const connectionRequestsList = Array.isArray(connectionRequests?.data)
+    ? connectionRequests.data
+    : [];
+
+  const unreadConnectionRequestsCount = connectionRequestsList.length;
+
+  // ✅ FIXED: Safe reduce with Array.isArray check
+  const conversationsList = Array.isArray(conversations) ? conversations : [];
+
+  const unreadMessagesCount = conversationsList.reduce(
+    (total, conversation) => total + (conversation?.unreadCount || 0),
+    0,
+  );
 
   const desktopNavItems = useMemo(() => {
     const items = [
@@ -247,7 +260,11 @@ const Navbar = () => {
     const links = [
       { to: "/messages", label: "Messages", badge: unreadMessagesCount },
       { to: "/jobs", label: "Jobs" },
-      { to: "/notifications", label: "Notifications", badge: unreadNotificationCount },
+      {
+        to: "/notifications",
+        label: "Notifications",
+        badge: unreadNotificationCount,
+      },
     ];
 
     if (authUser?.role !== "recruiter") {
@@ -500,11 +517,11 @@ const Navbar = () => {
                       className="h-9 w-9 rounded-2xl object-cover ring-1 ring-slate-200"
                     />
                     <div className="text-left">
-                      <p className="text-sm font-semibold text-slate-900">
-                        Me
-                      </p>
+                      <p className="text-sm font-semibold text-slate-900">Me</p>
                       <p className="text-xs text-slate-500">
-                        {authUser?.role === "recruiter" ? "Recruiter" : "Profile"}
+                        {authUser?.role === "recruiter"
+                          ? "Recruiter"
+                          : "Profile"}
                       </p>
                     </div>
                   </button>
@@ -710,7 +727,9 @@ const Navbar = () => {
                   {item.badge ? (
                     <span
                       className={`absolute right-3 top-1 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                        active ? "bg-white/20 text-white" : "bg-red-600 text-white"
+                        active
+                          ? "bg-white/20 text-white"
+                          : "bg-red-600 text-white"
                       }`}
                     >
                       {getBadgeCount(item.badge)}
