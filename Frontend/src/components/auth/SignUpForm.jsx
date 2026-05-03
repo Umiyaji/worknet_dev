@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { axiosInstance } from "../../lib/axios.js";
 import { toast } from "react-hot-toast";
 import { Check, Eye, EyeOff, Loader, X } from "lucide-react";
-import GoogleLoginComp from "../googleLoginComp.jsx";
+import GoogleLoginComp from "../GoogleLoginComp.jsx";
 
 const companySizeOptions = [
   "1-10 employees",

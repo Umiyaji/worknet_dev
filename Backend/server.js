@@ -95,7 +95,7 @@ app.use("/api/v1/job-rows", jobRowRoutes);
 app.use("/api/v1/lookups", lookupRoutes);
 
 if (process.env.NODE_ENV === "production") {
-	const pathToFrontend = path.join(__dirname, "..", "worknet-frontend", "dist");
+	const pathToFrontend = path.join(__dirname, "..", "Frontend", "dist");
 
 	app.use(express.static(pathToFrontend));
 

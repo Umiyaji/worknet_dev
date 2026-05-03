@@ -13,7 +13,7 @@ import ProfilePage from "./pages/ProfilePage";
 import SuggestionsPage from "./pages/SuggestionsPage";
 import PostCreateMobile from "./pages/PostCreateMobile";
 import Resume from "./pages/Resume";
-import Messages from "./pages/messages";
+import Messages from "./pages/Messages";
 import RecruiterSignUpPage from "./pages/auth/RecruiterSignUpPage";
 import RecruiterDashboardPage from "./pages/RecruiterDashboardPage";
 import RecruiterJobsPage from "./pages/RecruiterJobsPage";
