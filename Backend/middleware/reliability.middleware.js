@@ -31,7 +31,7 @@ export const basicSecurityHeaders = (_req, res, next) => {
 	res.setHeader("X-Content-Type-Options", "nosniff");
 	res.setHeader("X-XSS-Protection", "0");
 	res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
-	res.setHeader("Cross-Origin-Resource-Policy", "same-site");
+	res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
 	res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
 	const isUploadsPath = _req.path.startsWith("/uploads/");
 
