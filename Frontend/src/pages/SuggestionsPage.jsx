@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { axiosInstance } from "../lib/axios";
 import RecommendedUser from "../components/RecommendedUser";
@@ -14,13 +15,19 @@ const SuggestionsPage = () => {
     });
 
     const {
-        data: recommendedUsers,
+        data: recommendedUsersData,
         isLoading: loadingSuggestions,
         error,
     } = useQuery({
         queryKey: ["recommendedUsers"],
         queryFn: () => axiosInstance.get("/users/suggestions").then((res) => res.data),
     });
+
+    const recommendedUsers = useMemo(() => {
+        if (Array.isArray(recommendedUsersData)) return recommendedUsersData;
+        if (recommendedUsersData?.users && Array.isArray(recommendedUsersData.users)) return recommendedUsersData.users;
+        return [];
+    }, [recommendedUsersData]);
 
     if (loadingUser || loadingSuggestions) return <p className="p-4">Loading...</p>;
     if (error) return <p className="p-4 text-red-500">Failed to load suggestions.</p>;

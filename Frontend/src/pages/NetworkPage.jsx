@@ -32,9 +32,11 @@ const NetworkPage = () => {
         .get("/users/suggestions?limit=4&includeTotal=true")
         .then((res) => res.data),
   });
-  const recommendedUsers = Array.isArray(suggestionMeta)
-    ? suggestionMeta
-    : suggestionMeta?.users || [];
+  const recommendedUsers = useMemo(() => {
+    if (Array.isArray(suggestionMeta)) return suggestionMeta;
+    if (suggestionMeta?.users && Array.isArray(suggestionMeta.users)) return suggestionMeta.users;
+    return [];
+  }, [suggestionMeta]);
 
   const isLoading =
     loadingRequests ||
@@ -178,7 +180,7 @@ const NetworkPage = () => {
               )}
             </section>
 
-            {recommendedUsers?.length ? (
+            {Array.isArray(recommendedUsers) && recommendedUsers.length > 0 ? (
               <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm lg:hidden">
                 <div className="mb-4 flex items-center justify-between">
                   <div>
@@ -197,13 +199,15 @@ const NetworkPage = () => {
                   </Link>
                 </div>
                 <div className="space-y-3">
-                  {recommendedUsers.map((suggestedUser) => (
-                    <RecommendedUser
-                      key={suggestedUser._id}
-                      user={suggestedUser}
-                      headlineWidth="max-w-[130px]"
-                    />
-                  ))}
+                  {Array.isArray(recommendedUsers) ? (
+                    recommendedUsers.map((suggestedUser) => (
+                      <RecommendedUser
+                        key={suggestedUser._id}
+                        user={suggestedUser}
+                        headlineWidth="max-w-[130px]"
+                      />
+                    ))
+                  ) : null}
                 </div>
               </section>
             ) : null}

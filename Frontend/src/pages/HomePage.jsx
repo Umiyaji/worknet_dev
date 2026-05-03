@@ -18,11 +18,17 @@ const HomePage = () => {
   const queryClient = useQueryClient();
   const authUser = queryClient.getQueryData(["authUser"]);
 
-  const { data: recommendedUsers, isLoading: recommendedLoading } = useQuery({
+  const { data: recommendedUsersData, isLoading: recommendedLoading } = useQuery({
     queryKey: ["recommendedUsers"],
     queryFn: () =>
       axiosInstance.get("/users/suggestions?limit=4").then((res) => res.data),
   });
+
+  const recommendedUsers = useMemo(() => {
+    if (Array.isArray(recommendedUsersData)) return recommendedUsersData;
+    if (recommendedUsersData?.users && Array.isArray(recommendedUsersData.users)) return recommendedUsersData.users;
+    return [];
+  }, [recommendedUsersData]);
 
   const { data: feedStatsData, isLoading: feedStatsLoading } = useQuery({
     queryKey: ["feedStats"],
@@ -208,7 +214,7 @@ const HomePage = () => {
         </section>
       </div>
 
-      {recommendedUsers?.length > 0 ? (
+      {Array.isArray(recommendedUsers) && recommendedUsers.length > 0 ? (
         <div className="sticky top-[78px] hidden h-[calc(100vh-110px)] overflow-y-auto md:col-span-1 md:block lg:col-span-1">
           <section className="rounded-[28px] border border-white/70 bg-white/90 p-4 shadow-sm backdrop-blur">
             <div className="mb-5 flex items-center justify-between">
@@ -228,13 +234,17 @@ const HomePage = () => {
               </Link>
             </div>
             <div className="space-y-1">
-              {recommendedUsers.map((user) => (
-                <RecommendedUser
-                  key={user._id}
-                  user={user}
-                  headlineWidth="max-w-[90px]"
-                />
-              ))}
+              {Array.isArray(recommendedUsers) ? (
+                recommendedUsers.map((user) => (
+                  <RecommendedUser
+                    key={user._id}
+                    user={user}
+                    headlineWidth="max-w-[90px]"
+                  />
+                ))
+              ) : (
+                <p className="text-sm text-slate-500">No suggestions found.</p>
+              )}
             </div>
           </section>
         </div>
