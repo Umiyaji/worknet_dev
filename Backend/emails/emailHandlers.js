@@ -6,17 +6,20 @@ import {
 	createSignupOtpEmailTemplate,
 } from "./emailTemplates.js";
 
+import fs from "fs";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const logoPath = path.resolve(__dirname, "../../Frontend/public/favicon-logo1.png");
 
-const sharedAttachments = [
-	{
+const sharedAttachments = [];
+if (fs.existsSync(logoPath)) {
+	sharedAttachments.push({
 		filename: "favicon-logo1.png",
 		path: logoPath,
 		cid: "worknet-logo",
-	},
-];
+	});
+}
 
 export const sendWelcomeEmail = async (email, name, profileUrl) => {
 
