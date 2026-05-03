@@ -2,7 +2,7 @@ const WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 60 * 1000);
 const MAX_REQUESTS = Number(process.env.RATE_LIMIT_MAX || 300);
 const AUTH_WINDOW_MS = Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000);
 const AUTH_MAX_REQUESTS = Number(process.env.AUTH_RATE_LIMIT_MAX || 25);
-const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30 * 1000);
+const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 60 * 1000);
 const rateBuckets = new Map();
 const authRateBuckets = new Map();
 
@@ -30,7 +30,7 @@ export const requestTimeout = (req, res, next) => {
 export const basicSecurityHeaders = (_req, res, next) => {
 	res.setHeader("X-Content-Type-Options", "nosniff");
 	res.setHeader("X-XSS-Protection", "0");
-	res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+	res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
 	res.setHeader("Cross-Origin-Resource-Policy", "same-site");
 	res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
 	const isUploadsPath = _req.path.startsWith("/uploads/");
