@@ -105,7 +105,9 @@ export const sendSignupOtp = async (req, res) => {
 			{ upsert: true, new: true, setDefaultsOnInsert: true }
 		);
 
-		await sendSignupOtpEmail(email, name, otpCode);
+		// Send OTP email in background (non-blocking) to prevent timeouts
+		sendSignupOtpEmail(email, name, otpCode)
+			.catch(err => console.error("OTP Email failed to send in background:", err.message));
 
 		return res.json({
 			message: "OTP sent successfully",
