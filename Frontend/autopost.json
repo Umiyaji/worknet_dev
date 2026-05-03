@@ -219,7 +219,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://localhost:5173/api/v1/posts/automation/create-job-post",
+        "url": "https://worknet-dev.onrender.com/api/v1/posts/automation/create-job-post",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
