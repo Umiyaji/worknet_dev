@@ -1,24 +1,111 @@
-**Deployment Guide (quick)**
+# 🚀 Worknet Deployment Guide
 
-- Backend (recommended: Render / Heroku / DigitalOcean / VPS)
-  - Set environment variables from `Backend/.env.example` in your host's env settings (never commit `.env`).
-  - Build the frontend and copy the `dist` output into `Frontend/dist` (or deploy frontend separately and set `CLIENT_URL` accordingly).
-  - IMPORTANT: This repository previously contained a committed `Backend/.env` file with secrets — that file has been removed. Create a local `.env` from `Backend/.env.example` and set values in your host's environment settings instead.
-  - Start the server with `npm start` in the `Backend` folder (ensure `NODE_ENV=production`).
-  - Note: This project uses `socket.io` and long-running processes (schedulers). Serverless platforms (Vercel functions, Netlify functions) are NOT suitable for the backend.
+This guide provides step-by-step instructions for deploying the Worknet application (Backend & Frontend) to production.
 
-- Frontend (recommended: Vercel / Netlify / static host)
-  - In `Frontend`, run `npm run build` to create `dist`.
-  - Deploy the site to any static host and set `VITE_BACKEND_URL` to your backend origin.
+---
 
-- Deployment options
-  - Option A (single host): Build frontend, place `Frontend/dist` adjacent to `Backend` on the server and run the backend process — server will serve static files (server.js looks for `Frontend/dist`).
-  - Option B (separate hosts): Deploy frontend to Vercel/Netlify and backend to a container/VM; set `VITE_BACKEND_URL` to backend origin and `CLIENT_URL` to frontend origin.
+## 📋 Prerequisites
 
-- Common checks
-  - Ensure `CLIENT_URL` env matches frontend origin so CORS allows requests.
-  - Ensure `JWT_SECRET` is a long random string in production.
-  - Ensure `MONGO_URI` uses a production database and network access is allowed from your host.
-  - Do not commit `.env` files. Use host environment variable configuration.
+Before you begin, ensure you have accounts/credentials for:
+- **MongoDB Atlas**: For the database.
+- **Cloudinary**: For image and file uploads.
+- **Google Cloud Console**: For Google Authentication.
+- **Gmail Account**: For sending notification emails (requires an "App Password").
+- **Google AI Studio**: For the Gemini API key (AI features).
 
-- If you want me to prepare deployment scripts for a specific host (Render, Heroku, Dockerfile + Compose), tell me which provider and I will add them.
+---
+
+## 🛠 Environment Variables
+
+Copy the `.env.example` files in both `Backend` and `Frontend` directories and fill in your production values.
+
+### Backend (`Backend/.env`)
+| Variable | Description |
+| :--- | :--- |
+| `PORT` | Port number (default: 5000). |
+| `NODE_ENV` | Set to `production`. |
+| `MONGO_URI` | Your MongoDB connection string. |
+| `JWT_SECRET` | A long, random string for token security. |
+| `CLIENT_URL` | The URL of your deployed frontend (used for CORS). |
+| `CLOUDINARY_*` | Cloud name, API key, and API secret from Cloudinary dashboard. |
+| `SMTP_USER` | Your email address. |
+| `SMTP_PASS` | Your Gmail App Password (not your regular password). |
+| `GEMINI_API_KEY` | API key from Google AI Studio. |
+
+### Frontend (`Frontend/.env`)
+| Variable | Description |
+| :--- | :--- |
+| `VITE_BACKEND_URL` | The URL of your deployed backend API (e.g., `https://api.worknet.com`). |
+| `VITE_APP_GOOGLE_AUTH_KEY` | Google Client ID for OAuth. |
+
+---
+
+## 🚢 Deployment Options
+
+### Option A: Monolithic (Backend serves Frontend)
+This is the simplest way to deploy. The backend will serve the frontend's static files.
+
+1. **Build the Frontend**:
+   ```bash
+   cd Frontend
+   npm install
+   npm run build
+   ```
+2. **Directory Check**: Ensure the `dist` folder is created at `Frontend/dist`.
+3. **Deploy Backend**: Deploy the `Backend` folder to a service like **Render**, **DigitalOcean**, or **AWS**.
+   - Set `NODE_ENV=production`.
+   - The server is configured to look for the frontend at `../Frontend/dist`.
+4. **Render Setup**: Use the provided `render.yaml` for automated deployment.
+
+### Option B: Decoupled (Vercel/Netlify + Render)
+Recommended for better performance and scalability.
+
+1. **Deploy Frontend (Vercel/Netlify)**:
+   - Build Command: `npm run build`
+   - Output Directory: `dist`
+   - Environment Variables: Add `VITE_BACKEND_URL` pointing to your backend.
+2. **Deploy Backend (Render/Railway/DO)**:
+   - Environment Variables: Add `CLIENT_URL` pointing to your frontend domain.
+
+---
+
+## ☁️ Service Setup Guide
+
+### 1. MongoDB Atlas
+1. Create a cluster and a database named `worknet`.
+2. Go to **Network Access** and whitelist `0.0.0.0/0` (or your server's IP).
+3. Copy the connection string into `MONGO_URI`.
+
+### 2. Cloudinary
+1. Create a free account.
+2. Copy `Cloud Name`, `API Key`, and `API Secret` from the Dashboard into your Backend env settings.
+
+### 3. Google Authentication
+1. Go to [Google Cloud Console](https://console.cloud.google.com/).
+2. Create a new project.
+3. Configure the **OAuth Consent Screen**.
+4. Create **Credentials** -> **OAuth Client ID** (Web application).
+5. Add your production domain to **Authorized JavaScript origins** and **Authorized redirect URIs**.
+6. Copy the Client ID to `VITE_APP_GOOGLE_AUTH_KEY`.
+
+### 4. Gmail SMTP (for Emails)
+1. Enable 2-Factor Authentication on your Gmail account.
+2. Search for **"App Passwords"** in your Google Account settings.
+3. Generate a new app password for "Mail".
+4. Use this 16-character code as `SMTP_PASS`.
+
+---
+
+## ⚠️ Important Considerations
+
+- **Case Sensitivity**: This project has been updated to use PascalCase for components (e.g., `Messages.jsx`). Ensure your deployment environment respects this.
+- **Socket.io**: The backend uses WebSockets. Ensure your hosting provider supports sticky sessions or persistent connections (standard on Render/DigitalOcean/AWS, but NOT on Vercel/Netlify Functions).
+- **Security**: Never commit `.env` files to Git. Always use the hosting provider's dashboard to set environment variables.
+
+---
+
+## 🔍 Troubleshooting
+
+- **CORS Error**: Ensure `CLIENT_URL` in Backend exactly matches the URL in your browser.
+- **White Screen**: Check `VITE_BACKEND_URL` in Frontend. Ensure it includes `https://` and no trailing slash.
+- **Auth Fails**: Ensure your production domain is whitelisted in the Google Cloud Console.
