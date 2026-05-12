@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
 import { FileText, Image, Loader, Sparkles, Wand2, X } from "lucide-react";
@@ -451,9 +452,10 @@ const PostCreation = ({ user }) => {
 				</button>
 			</div>
 
-			{isAiModalOpen && (
-				<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
-					<div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+			{isAiModalOpen && typeof document !== "undefined"
+				? createPortal(
+					<div className="fixed inset-0 z-[1000] overflow-y-auto bg-slate-950/55 p-3 md:p-6">
+						<div className="mx-auto my-2 flex w-full max-w-4xl flex-col rounded-3xl bg-white shadow-2xl md:my-4 md:max-h-[calc(100vh-2rem)] md:overflow-hidden">
 						<div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
 							<div>
 								<p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">AI writing helper</p>
@@ -468,7 +470,7 @@ const PostCreation = ({ user }) => {
 							</button>
 						</div>
 
-						<div className="grid gap-6 overflow-y-auto px-6 py-5 md:grid-cols-[1.1fr_0.9fr]">
+						<div className="grid gap-6 overflow-y-auto px-6 py-5 lg:grid-cols-[1.1fr_0.9fr]">
 							<div className="min-w-0">
 								<label className="mb-2 block text-sm font-medium text-slate-700">What should the AI write?</label>
 								<textarea
@@ -532,7 +534,7 @@ const PostCreation = ({ user }) => {
 
 							<div className="flex min-h-0 flex-col rounded-3xl bg-slate-950 p-5 text-white">
 								<p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Preview</p>
-								<div className="min-h-[300px] max-h-[45vh] overflow-y-auto rounded-2xl bg-white/8 p-4 text-sm leading-7 text-slate-100">
+								<div className="min-h-[220px] max-h-[36vh] overflow-y-auto rounded-2xl bg-white/8 p-4 text-sm leading-7 text-slate-100 lg:min-h-[300px] lg:max-h-[45vh]">
 									{aiDraft ? (
 										<p className="whitespace-pre-wrap">{aiDraft}</p>
 									) : (
@@ -562,9 +564,11 @@ const PostCreation = ({ user }) => {
 								</div>
 							</div>
 						</div>
-					</div>
-				</div>
-			)}
+						</div>
+					</div>,
+					document.body,
+				)
+				: null}
 		</div>
 	);
 };
