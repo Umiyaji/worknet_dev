@@ -6,17 +6,38 @@ const normalizeTargetContext = (value) =>
 
 export const getTargetLists = async (req, res) => {
   try {
-    const colleges = await User.distinct("college", { college: { $ne: "" } });
-    const cities = await User.distinct("city", { city: { $ne: "" } });
+    const MAX_LOOKUP_RESULTS = 5000;
+
+    const [colleges, cities] = await Promise.all([
+      User.aggregate([
+        { $match: { college: { $type: "string", $ne: "" } } },
+        { $project: { value: { $trim: { input: "$college" } } } },
+        { $match: { value: { $ne: "" } } },
+        { $group: { _id: { $toLower: "$value" } } },
+        { $sort: { _id: 1 } },
+        { $limit: MAX_LOOKUP_RESULTS },
+      ]),
+      User.aggregate([
+        { $match: { city: { $type: "string", $ne: "" } } },
+        { $project: { value: { $trim: { input: "$city" } } } },
+        { $match: { value: { $ne: "" } } },
+        { $group: { _id: { $toLower: "$value" } } },
+        { $sort: { _id: 1 } },
+        { $limit: MAX_LOOKUP_RESULTS },
+      ]),
+    ]);
 
     // Normalize and sort
     const normalize = (arr) =>
       (arr || [])
-        .map((v) => String(v || "").trim())
+        .map((v) => String(v?._id ?? v ?? "").trim().toLowerCase())
         .filter(Boolean)
         .sort((a, b) => a.localeCompare(b));
 
-    res.status(200).json({ colleges: normalize(colleges), cities: normalize(cities) });
+    res.status(200).json({
+      colleges: normalize(colleges),
+      cities: normalize(cities),
+    });
   } catch (error) {
     console.error("Error fetching target lists:", error);
     res.status(500).json({ message: "Internal server error" });

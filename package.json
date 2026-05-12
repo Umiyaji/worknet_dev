@@ -2,6 +2,9 @@
   "scripts": {
     "install:all": "npm install && cd Frontend && npm install && cd ../Backend && npm install",
     "build:frontend": "cd Frontend && npm run build",
+    "lint:frontend": "cd Frontend && npm run lint",
+    "check:backend": "cd Backend && node --check server.js",
+    "ci:check": "npm run lint:frontend && npm run build:frontend && npm run check:backend",
     "start:backend": "cd Backend && npm start",
     "dev:backend": "cd Backend && npm run dev",
     "dev:frontend": "cd Frontend && npm run dev"

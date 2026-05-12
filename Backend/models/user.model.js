@@ -103,6 +103,12 @@ const userSchema = new mongoose.Schema(
 			default: "",
 			trim: true,
 		},
+		hiringContactEmail: {
+			type: String,
+			default: "",
+			trim: true,
+			lowercase: true,
+		},
 		experience: [
 			{
 				title: { type: String },

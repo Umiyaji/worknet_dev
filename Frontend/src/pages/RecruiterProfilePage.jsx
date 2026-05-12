@@ -1,7 +1,7 @@
 ﻿import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { axiosInstance } from "../lib/axios";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Building2, MapPin, BriefcaseBusiness, Globe, ArrowLeft, Camera, Trash2 } from "lucide-react";
+import { Building2, MapPin, BriefcaseBusiness, Globe, ArrowLeft, Camera, Trash2, Mail } from "lucide-react";
 import toast from "react-hot-toast";
 import { useEffect, useRef, useState } from "react";
 import SmartImage from "../components/SmartImage";
@@ -14,6 +14,16 @@ const fileToDataUrl = (file) =>
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+
+const companySizeOptions = [
+  "11-50 Employee",
+  "51-200 Employee",
+  "201-500 Employee",
+  "501-1000 Employee",
+  "1001-5000 Employee",
+  "5001-10000 Employee",
+  "10001+ employees",
+];
 
 const RecruiterProfilePage = () => {
   const { username } = useParams();
@@ -38,10 +48,18 @@ const RecruiterProfilePage = () => {
 
   const [aboutDraft, setAboutDraft] = useState("");
   const [isEditingAbout, setIsEditingAbout] = useState(false);
+  const [companySizeDraft, setCompanySizeDraft] = useState("");
+  const [hrNameDraft, setHrNameDraft] = useState("");
+  const [contactEmailDraft, setContactEmailDraft] = useState("");
+  const [isEditingCompanySize, setIsEditingCompanySize] = useState(false);
+  const [isEditingContactInfo, setIsEditingContactInfo] = useState(false);
 
   useEffect(() => {
     if (!recruiter) return;
     setAboutDraft(recruiter.aboutCompany || "");
+    setCompanySizeDraft(recruiter.companySize || "");
+    setHrNameDraft(recruiter.HRName || recruiter.name || "");
+    setContactEmailDraft(recruiter.hiringContactEmail || "");
   }, [recruiter?.aboutCompany, recruiter]);
 
   const { mutateAsync: updateCompanyProfile, isPending: isSavingProfile } = useMutation({
@@ -111,6 +129,41 @@ const RecruiterProfilePage = () => {
       await updateCompanyProfile({ aboutCompany: aboutDraft });
       toast.success("About updated");
       setIsEditingAbout(false);
+    } catch {
+      // handled by mutation onError
+    }
+  };
+
+  const handleSaveContactInfo = async () => {
+    const normalizedEmail = String(contactEmailDraft || "").trim().toLowerCase();
+    if (!normalizedEmail) {
+      toast.error("Contact email is required");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      toast.error("Please enter a valid contact email");
+      return;
+    }
+
+    try {
+      await updateCompanyProfile({
+        HRName: hrNameDraft,
+        hiringContactEmail: normalizedEmail,
+      });
+      toast.success("Contact details updated");
+      setIsEditingContactInfo(false);
+    } catch {
+      // handled by mutation onError
+    }
+  };
+
+  const handleSaveCompanySize = async () => {
+    try {
+      await updateCompanyProfile({ companySize: companySizeDraft });
+      toast.success("Company size updated");
+      setIsEditingCompanySize(false);
     } catch {
       // handled by mutation onError
     }
@@ -256,12 +309,127 @@ const RecruiterProfilePage = () => {
           <p className="text-3xl font-bold text-slate-900">{data.totalOpenings}</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">Company Size</p>
-          <p className="text-lg font-semibold text-slate-900">{recruiter.companySize || "Not specified"}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm text-slate-500">Company Size</p>
+            {isOwnRecruiterProfile && !isEditingCompanySize ? (
+              <button
+                type="button"
+                onClick={() => setIsEditingCompanySize(true)}
+                className="text-xs text-blue-600 hover:text-blue-800"
+              >
+                Edit
+              </button>
+            ) : null}
+          </div>
+          {isOwnRecruiterProfile && isEditingCompanySize ? (
+            <div className="mt-2 space-y-2">
+              <select
+                value={companySizeDraft}
+                onChange={(event) => setCompanySizeDraft(event.target.value)}
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">Select company size</option>
+                {companySizeOptions.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isSavingProfile}
+                  onClick={handleSaveCompanySize}
+                  className="rounded-md bg-slate-900 px-3 py-1.5 text-xs text-white hover:bg-slate-800 disabled:opacity-60"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditingCompanySize(false);
+                    setCompanySizeDraft(recruiter.companySize || "");
+                  }}
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-2 text-lg font-semibold text-slate-900">
+              {recruiter.companySize || "Not specified"}
+            </p>
+          )}
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">Hiring Contact</p>
-          <p className="text-lg font-semibold text-slate-900">{recruiter.HRName || recruiter.name}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm text-slate-500">Hiring Contact</p>
+            {isOwnRecruiterProfile && !isEditingContactInfo ? (
+              <button
+                type="button"
+                onClick={() => setIsEditingContactInfo(true)}
+                className="text-xs text-blue-600 hover:text-blue-800"
+              >
+                Edit
+              </button>
+            ) : null}
+          </div>
+          {isOwnRecruiterProfile && isEditingContactInfo ? (
+            <div className="mt-2 space-y-2">
+              <input
+                type="text"
+                value={hrNameDraft}
+                onChange={(event) => setHrNameDraft(event.target.value)}
+                placeholder="Hiring contact name"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+              <input
+                type="email"
+                value={contactEmailDraft}
+                onChange={(event) => setContactEmailDraft(event.target.value)}
+                placeholder="hr.person@company.com"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
+                value={companySizeDraft}
+                onChange={(event) => setCompanySizeDraft(event.target.value)}
+                placeholder="Company size"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isSavingProfile}
+                  onClick={handleSaveContactInfo}
+                  className="rounded-md bg-slate-900 px-3 py-1.5 text-xs text-white hover:bg-slate-800 disabled:opacity-60"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditingContactInfo(false);
+                    setCompanySizeDraft(recruiter.companySize || "");
+                    setHrNameDraft(recruiter.HRName || recruiter.name || "");
+                    setContactEmailDraft(recruiter.hiringContactEmail || "");
+                  }}
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 space-y-1">
+              <p className="text-base font-semibold text-slate-900">{recruiter.HRName || recruiter.name}</p>
+              <p className="inline-flex items-center gap-1 text-sm font-medium text-slate-800 break-all">
+                <Mail size={14} />
+                {recruiter.hiringContactEmail || "Not provided"}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

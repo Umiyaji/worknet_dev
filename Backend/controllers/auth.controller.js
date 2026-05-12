@@ -27,6 +27,7 @@ const normalizeCompanyFields = (payload = {}) => ({
 	companyLogo: String(payload.companyLogo || "").trim(),
 	aboutCompany: String(payload.aboutCompany || "").trim(),
 	HRName: String(payload.HRName || "").trim(),
+	hiringContactEmail: String(payload.hiringContactEmail || "").toLowerCase().trim(),
 });
 
 const hasCompanyInfo = (companyFields) =>
@@ -38,7 +39,8 @@ const hasCompanyInfo = (companyFields) =>
 			companyFields.companyLocation ||
 			companyFields.companyLogo ||
 			companyFields.aboutCompany ||
-			companyFields.HRName
+			companyFields.HRName ||
+			companyFields.hiringContactEmail
 	);
 
 const getDefaultProfilePicture = () => "";
@@ -161,6 +163,9 @@ export const signup = async (req, res) => {
 
 		if (normalizedRole === "recruiter" && !companyFields.companyName) {
 			return res.status(400).json({ message: "Company name is required for recruiter signup" });
+		}
+		if (companyFields.hiringContactEmail && !validator.isEmail(companyFields.hiringContactEmail)) {
+			return res.status(400).json({ message: "Invalid hiring contact email" });
 		}
 
 		email = normalizeEmail(email);
@@ -311,6 +316,9 @@ export const googleAuth = async (req, res) => {
 		const normalizedRole = normalizeRole(role);
 		const companyFields = normalizeCompanyFields(req.body);
 		const recruiterPayloadProvided = normalizedRole === "recruiter" || hasCompanyInfo(companyFields);
+		if (companyFields.hiringContactEmail && !validator.isEmail(companyFields.hiringContactEmail)) {
+			return res.status(400).json({ message: "Invalid hiring contact email" });
+		}
 
 		if (!token) {
 			return res.status(400).json({ message: "Token is required" });
@@ -363,6 +371,7 @@ export const googleAuth = async (req, res) => {
 			user.companyLogo = companyFields.companyLogo || user.companyLogo;
 			user.aboutCompany = companyFields.aboutCompany || user.aboutCompany;
 			user.HRName = companyFields.HRName || user.HRName;
+			user.hiringContactEmail = companyFields.hiringContactEmail || user.hiringContactEmail;
 			await user.save();
 		}
 

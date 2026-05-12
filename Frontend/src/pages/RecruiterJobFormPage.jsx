@@ -95,6 +95,7 @@ const MultiSelectDropdown = ({
   loading,
   emptyMessage,
 }) => {
+  const MAX_RENDERED_OPTIONS = 300;
   const [isOpen, setIsOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const containerRef = useRef(null);
@@ -122,6 +123,11 @@ const MultiSelectDropdown = ({
     if (!query) return options;
     return options.filter((option) => option.toLowerCase().includes(query));
   }, [options, searchValue]);
+
+  const visibleOptions = useMemo(
+    () => filteredOptions.slice(0, MAX_RENDERED_OPTIONS),
+    [filteredOptions],
+  );
 
   const toggleValue = (option) => {
     if (values.includes(option)) {
@@ -190,11 +196,14 @@ const MultiSelectDropdown = ({
             className="mb-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none"
           />
 
-          <div className="max-h-56 space-y-1 overflow-y-auto">
+          <div
+            className="max-h-56 space-y-1 overflow-y-auto overscroll-contain"
+            onWheel={(event) => event.stopPropagation()}
+          >
             {loading ? (
               <p className="px-2 py-3 text-sm text-slate-500">Loading...</p>
-            ) : filteredOptions.length ? (
-              filteredOptions.map((option) => {
+            ) : visibleOptions.length ? (
+              visibleOptions.map((option) => {
                 const checked = values.includes(option);
 
                 return (
@@ -215,6 +224,12 @@ const MultiSelectDropdown = ({
               <p className="px-2 py-3 text-sm text-slate-500">{emptyMessage}</p>
             )}
           </div>
+          {!loading && filteredOptions.length > MAX_RENDERED_OPTIONS ? (
+            <p className="mt-2 px-1 text-xs text-slate-500">
+              Showing first {MAX_RENDERED_OPTIONS} results. Type more to narrow
+              down.
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>

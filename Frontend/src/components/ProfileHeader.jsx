@@ -54,6 +54,10 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
     }
   };
 
+  const refreshTargetLists = () => {
+    queryClient.invalidateQueries({ queryKey: ["targetLists"] });
+  };
+
   // Connection Status Query
   const { data: connectionStatus, refetch: refetchConnectionStatus } = useQuery(
     {
@@ -190,6 +194,9 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
       }));
       queryClient.invalidateQueries(["authUser"]);
       queryClient.invalidateQueries(["userProfile", updatedUser.username]);
+      if (updatedUser?.college || updatedUser?.city) {
+        refreshTargetLists();
+      }
       if (updatedUser?.resumeExtractionApplied) {
         toast.success("Resume uploaded and profile auto-filled with AI");
       } else {
@@ -431,9 +438,32 @@ const ProfileHeader = ({ userData, onSave, isOwnProfile }) => {
   };
 
   const handleFieldSave = (field, value) => {
+    const normalizedValue = String(value || "").trim().toLowerCase();
     const dataToSave = { [field]: value };
     setEditedData((prev) => ({ ...prev, [field]: value }));
     onSave(dataToSave);
+    if ((field === "college" || field === "city") && normalizedValue) {
+      queryClient.setQueryData(["targetLists"], (prev) => {
+        const current = prev || { colleges: [], cities: [] };
+        const colleges = Array.isArray(current.colleges) ? current.colleges : [];
+        const cities = Array.isArray(current.cities) ? current.cities : [];
+        if (field === "college") {
+          return {
+            ...current,
+            colleges: Array.from(new Set([...colleges, normalizedValue])).sort((a, b) =>
+              a.localeCompare(b),
+            ),
+          };
+        }
+        return {
+          ...current,
+          cities: Array.from(new Set([...cities, normalizedValue])).sort((a, b) =>
+            a.localeCompare(b),
+          ),
+        };
+      });
+      refreshTargetLists();
+    }
     setEditingField(null);
     toast.success(
       `${field.charAt(0).toUpperCase() + field.slice(1)} updated successfully`,

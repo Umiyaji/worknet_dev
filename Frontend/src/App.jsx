@@ -1,31 +1,35 @@
+import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/layout/Layout";
-import HomePage from "./pages/HomePage";
-import LoginPage from "./pages/auth/LoginPage";
-import SignUpPage from "./pages/auth/SignUpPage";
 import toast, { Toaster } from "react-hot-toast";
 import { useQuery } from "@tanstack/react-query";
 import { axiosInstance } from "./lib/axios";
-import NotificationsPage from "./pages/NotificationsPage";
-import NetworkPage from "./pages/NetworkPage";
-import PostSharePage from "./pages/PostSharePage";
-import ProfilePage from "./pages/ProfilePage";
-import SuggestionsPage from "./pages/SuggestionsPage";
-import PostCreateMobile from "./pages/PostCreateMobile";
-import Resume from "./pages/Resume";
-import Messages from "./pages/messages";
-import RecruiterSignUpPage from "./pages/auth/RecruiterSignUpPage";
-import RecruiterDashboardPage from "./pages/RecruiterDashboardPage";
-import RecruiterJobsPage from "./pages/RecruiterJobsPage";
-import RecruiterJobFormPage from "./pages/RecruiterJobFormPage";
-import RecruiterApplicantsPage from "./pages/RecruiterApplicantsPage";
-import RecruiterApplicantDetailPage from "./pages/RecruiterApplicantDetailPage";
-import RecruiterAutomatedJobPostingPage from "./pages/RecruiterAutomatedJobPostingPage";
-import JobsListingPage from "./pages/JobsListingPage";
-import JobDetailPage from "./pages/JobDetailPage";
-import RecruiterProfilePage from "./pages/RecruiterProfilePage";
-import MyApplicationsPage from "./pages/MyApplicationsPage";
 import GlobalUploadProgressBar from "./components/GlobalUploadProgressBar";
+
+const HomePage = lazy(() => import("./pages/HomePage"));
+const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
+const SignUpPage = lazy(() => import("./pages/auth/SignUpPage"));
+const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
+const NetworkPage = lazy(() => import("./pages/NetworkPage"));
+const PostSharePage = lazy(() => import("./pages/PostSharePage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const SuggestionsPage = lazy(() => import("./pages/SuggestionsPage"));
+const PostCreateMobile = lazy(() => import("./pages/PostCreateMobile"));
+const Resume = lazy(() => import("./pages/Resume"));
+const Messages = lazy(() => import("./pages/messages"));
+const RecruiterSignUpPage = lazy(() => import("./pages/auth/RecruiterSignUpPage"));
+const RecruiterDashboardPage = lazy(() => import("./pages/RecruiterDashboardPage"));
+const RecruiterJobsPage = lazy(() => import("./pages/RecruiterJobsPage"));
+const RecruiterJobFormPage = lazy(() => import("./pages/RecruiterJobFormPage"));
+const RecruiterApplicantsPage = lazy(() => import("./pages/RecruiterApplicantsPage"));
+const RecruiterApplicantDetailPage = lazy(() => import("./pages/RecruiterApplicantDetailPage"));
+const RecruiterAutomatedJobPostingPage = lazy(
+  () => import("./pages/RecruiterAutomatedJobPostingPage"),
+);
+const JobsListingPage = lazy(() => import("./pages/JobsListingPage"));
+const JobDetailPage = lazy(() => import("./pages/JobDetailPage"));
+const RecruiterProfilePage = lazy(() => import("./pages/RecruiterProfilePage"));
+const MyApplicationsPage = lazy(() => import("./pages/MyApplicationsPage"));
 
 const RecruiterRoute = ({ authUser, children }) => {
   if (!authUser) return <Navigate to="/login" />;
@@ -57,7 +61,8 @@ function App() {
   return (
     <Layout>
       <GlobalUploadProgressBar />
-      <Routes>
+      <Suspense fallback={<div className="p-4 text-center text-sm text-gray-600">Loading...</div>}>
+        <Routes>
         <Route
           path="/"
           element={authUser ? <HomePage /> : <Navigate to="/login" replace />}
@@ -205,7 +210,8 @@ function App() {
           path="/suggestions"
           element={authUser ? <SuggestionsPage /> : <Navigate to="/login" replace />}
         />
-      </Routes>
+        </Routes>
+      </Suspense>
       <Toaster />
     </Layout>
   );

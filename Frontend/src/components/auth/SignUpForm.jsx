@@ -52,6 +52,7 @@ const SignUpForm = ({ defaultRecruiter = false }) => {
   const [industry, setIndustry] = useState("");
   const [companyLocation, setCompanyLocation] = useState("");
   const [HRName, setHRName] = useState("");
+  const [hiringContactEmail, setHiringContactEmail] = useState("");
   const otpInputRefs = useRef([]);
 
   const queryClient = useQueryClient();
@@ -169,6 +170,7 @@ const SignUpForm = ({ defaultRecruiter = false }) => {
       payload.industry = industry;
       payload.companyLocation = companyLocation;
       payload.HRName = HRName;
+      payload.hiringContactEmail = hiringContactEmail;
     }
 
     signUpMutation(payload);
@@ -385,6 +387,13 @@ const SignUpForm = ({ defaultRecruiter = false }) => {
             onChange={(e) => setHRName(e.target.value)}
             className={fieldClassName}
           />
+          <input
+            type="email"
+            placeholder="Hiring Contact Email (optional)"
+            value={hiringContactEmail}
+            onChange={(e) => setHiringContactEmail(e.target.value)}
+            className={fieldClassName}
+          />
         </div>
       )}
 
@@ -421,6 +430,7 @@ const SignUpForm = ({ defaultRecruiter = false }) => {
                   industry,
                   companyLocation,
                   HRName,
+                  hiringContactEmail,
                 }
               : {}
           }

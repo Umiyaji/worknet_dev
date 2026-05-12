@@ -388,6 +388,7 @@ export const updateProfile = async (req, res) => {
 			"companyBanner",
 			"aboutCompany",
 			"HRName",
+			"hiringContactEmail",
 		];
 
 		const updatedData = {};

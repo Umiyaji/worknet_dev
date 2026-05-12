@@ -5,6 +5,7 @@ import JobRow from "../models/jobRow.model.js";
 import Post from "../models/post.model.js";
 import cloudinary from "../lib/cloudinary.js";
 import { getPagination } from "../lib/pagination.js";
+import validator from "validator";
 
 const cleanString = (value) => (typeof value === "string" ? value.trim() : "");
 
@@ -244,12 +245,31 @@ export const updateRecruiterCompanyProfile = async (req, res) => {
 		}
 
 		recruiter.role = "recruiter";
-		recruiter.companyName = cleanString(req.body.companyName) || recruiter.companyName;
-		recruiter.companyWebsite = cleanString(req.body.companyWebsite) || recruiter.companyWebsite;
-		recruiter.companySize = cleanString(req.body.companySize) || recruiter.companySize;
-		recruiter.industry = cleanString(req.body.industry) || recruiter.industry;
-		recruiter.companyLocation = cleanString(req.body.companyLocation) || recruiter.companyLocation;
-		recruiter.HRName = cleanString(req.body.HRName) || recruiter.HRName;
+		if (Object.prototype.hasOwnProperty.call(req.body, "companyName")) {
+			recruiter.companyName = cleanString(req.body.companyName) || recruiter.companyName;
+		}
+		if (Object.prototype.hasOwnProperty.call(req.body, "companyWebsite")) {
+			recruiter.companyWebsite = cleanString(req.body.companyWebsite) || recruiter.companyWebsite;
+		}
+		if (Object.prototype.hasOwnProperty.call(req.body, "companySize")) {
+			recruiter.companySize = cleanString(req.body.companySize);
+		}
+		if (Object.prototype.hasOwnProperty.call(req.body, "industry")) {
+			recruiter.industry = cleanString(req.body.industry) || recruiter.industry;
+		}
+		if (Object.prototype.hasOwnProperty.call(req.body, "companyLocation")) {
+			recruiter.companyLocation = cleanString(req.body.companyLocation) || recruiter.companyLocation;
+		}
+		if (Object.prototype.hasOwnProperty.call(req.body, "HRName")) {
+			recruiter.HRName = cleanString(req.body.HRName);
+		}
+		if (Object.prototype.hasOwnProperty.call(req.body, "hiringContactEmail")) {
+			const hiringContactEmail = cleanString(req.body.hiringContactEmail).toLowerCase();
+			if (hiringContactEmail && !validator.isEmail(hiringContactEmail)) {
+				return res.status(400).json({ message: "Invalid hiring contact email" });
+			}
+			recruiter.hiringContactEmail = hiringContactEmail;
+		}
 
 		if (Object.prototype.hasOwnProperty.call(req.body, "aboutCompany")) {
 			recruiter.aboutCompany = cleanString(req.body.aboutCompany);

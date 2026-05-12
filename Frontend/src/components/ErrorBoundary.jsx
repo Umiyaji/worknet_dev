@@ -1,6 +1,8 @@
 import { Component } from "react";
 import toast from "react-hot-toast";
 
+const isDevelopment = import.meta.env.DEV;
+
 /**
  * ✅ ERROR BOUNDARY COMPONENT
  *
@@ -24,7 +26,7 @@ class ErrorBoundary extends Component {
     };
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError() {
     // Update state so the next render will show the fallback UI
     return { hasError: true };
   }
@@ -68,7 +70,7 @@ class ErrorBoundary extends Component {
             </p>
 
             {/* Show error details in development mode */}
-            {process.env.NODE_ENV === "development" && this.state.error && (
+            {isDevelopment && this.state.error && (
               <details className="mb-4 text-left bg-gray-100 p-3 rounded text-xs">
                 <summary className="cursor-pointer font-semibold text-gray-700">
                   Debug Info (Dev Only)
@@ -103,3 +105,6 @@ class ErrorBoundary extends Component {
 }
 
 export default ErrorBoundary;
+
+
+
